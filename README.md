@@ -1,50 +1,125 @@
-# Welcome to your Expo app 👋
+# 🧠 Serenity – AI Therapist (Donna AI)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+![Expo](https://img.shields.io/badge/Expo-000000?style=for-the-badge&logo=expo&logoColor=white)
+![React Native](https://img.shields.io/badge/React_Native-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Node.js](https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![Express.js](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)
+![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/Neon_SQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![AI](https://img.shields.io/badge/LLM-Microsoft_Phi-blueviolet?style=for-the-badge)
+![FYP](https://img.shields.io/badge/FYP-Final_Year_Project-success?style=for-the-badge)
 
-## Get started
+> **Serenity** is a full-stack **AI-powered therapist application** developed as a **Final Year Project (FYP)**. It delivers empathetic, intelligent, and real-time mental health support using a **fine-tuned Microsoft Phi Large Language Model (LLM)**.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## 🌟 Project Overview
 
-2. Start the app
+**Donna AI** is a virtual AI therapist focused on improving emotional well-being through meaningful and secure conversations. The system combines a modern **React Native mobile app**, a scalable **Node.js backend**, and an advanced **LLM engine**.
 
-   ```bash
-   npx expo start
-   ```
+---
 
-In the output, you'll find options to open the app in a
+## 🏗️ System Architecture
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+```text
+Mobile App (React Native + Expo)
+       │
+       ├── Firebase Authentication (Secure Login)
+       ├── Firestore Database (Real-time Chat Logs)
+       │
+Backend API (Node.js + Express)
+       │
+       ├── Neon SQL (PostgreSQL - Structured User Data)
+       └── AI Engine (Fine-tuned Microsoft Phi LLM)
+🚀 Tech Stack
+📱 Frontend
+Framework: React Native & Expo
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Routing: Expo Router (File-based)
 
-## Get a fresh project
+Styling: NativeWind / Tailwind CSS
 
-When you're ready, run:
+UI/UX: Responsive, calming, and mobile-first design
 
-```bash
-npm run reset-project
-```
+🖥️ Backend
+Runtime: Node.js
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Framework: Express.js
 
-## Learn more
+Architecture: REST APIs with secure middleware
 
-To learn more about developing your project with Expo, look at the following resources:
+🧠 AI Engine
+Model: Microsoft Phi (Fine-tuned)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Specialization: Therapeutic conversations & context-aware empathy
 
-## Join the community
+🔐 Infrastructure
+Auth: Firebase Authentication
 
-Join our community of developers creating universal apps.
+NoSQL: Firebase Firestore
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+SQL: Neon SQL (PostgreSQL)
+
+✨ Key Features
+🤖 Donna AI: Real-time, empathetic AI therapist.
+
+🔐 Secure Access: Industry-standard Firebase authentication.
+
+💬 Seamless Chat: Real-time messaging interface.
+
+📊 Scalable: Built with a modern micro-service-ready backend.
+
+🎨 Calming UI: Designed specifically for mental health contexts.
+
+📱 Cross-Platform: Full support for Android and iOS.
+
+🛠️ Getting Started
+1. Install Dependencies
+Bash
+
+npm install
+2. Start the App
+Bash
+
+npx expo start
+Supports:
+
+Expo Go (Physical Device)
+
+Android Emulator / iOS Simulator
+
+Development Builds
+
+📂 Project Structure
+Plaintext
+
+app/                # Expo Router screens & navigation
+components/         # Reusable UI components
+backend/            # Node.js + Express server logic
+firebase/           # Firebase config and initialization
+services/           # API handlers & AI engine integration
+assets/             # Images, fonts, and branding
+🔒 Security & Privacy
+Privacy First: Designed with user data protection as a core principle.
+
+Secure Auth: Firebase-based authentication ensures data integrity.
+
+Ethical AI: Fine-tuned to maintain boundaries and prioritize user safety.
+
+🎓 Academic Context
+Project Name: Serenity
+
+Domain: AI, Mental Health, Full Stack Development
+
+Project Type: Final Year Project (FYP)
+
+🌱 Future Enhancements
+🎙️ Voice Interaction: Talk directly to Donna AI.
+
+🎭 Emotion Detection: NLP-based sentiment analysis.
+
+📈 Analytics: A dashboard to track emotional progress over time.
+
+🌐 Multi-language: Support for diverse global users.
+
+

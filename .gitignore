@@ -1,0 +1,42 @@
+# Private and Environment Files
+.env
+.env*
+*.env
+*.env*
+serviceAccountKey.json
+
+# Backend exclusions
+Backend/.env
+Backend/serviceAccountKey.json
+Backend/venv/
+Backend/__pycache__/
+Backend/*.pyc
+Backend/static/audio/*
+!Backend/static/audio/.gitkeep
+
+# Frontend exclusions
+Frontend/.env
+Frontend/.env*
+Frontend/node_modules/
+Frontend/.expo/
+Frontend/dist/
+Frontend/web-build/
+Frontend/expo-env.d.ts
+Frontend/.kotlin/
+Frontend/*.orig.*
+Frontend/*.jks
+Frontend/*.p8
+Frontend/*.p12
+Frontend/*.key
+Frontend/*.mobileprovision
+Frontend/.metro-health-check*
+Frontend/npm-debug.*
+Frontend/yarn-debug.*
+Frontend/yarn-error.*
+Frontend/.DS_Store
+Frontend/*.pem
+Frontend/*.tsbuildinfo
+Frontend/app-example
+Frontend/ios/
+Frontend/android/
+Frontend/.vscode/

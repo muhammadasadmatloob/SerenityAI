@@ -48,6 +48,28 @@ class Message(Base):
     audio_url = Column(String, nullable=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
+class SessionSummary(Base):
+    __tablename__ = "session_summaries"
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), unique=True)
+    user_uid = Column(String, ForeignKey("users.firebase_uid"))
+    summary_data = Column(Text)  # Encrypted JSON containing main_issues, triggers, emotional_patterns, etc.
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class MessageAnalysis(Base):
+    __tablename__ = "message_analyses"
+    id = Column(Integer, primary_key=True, index=True)
+    message_id = Column(Integer, ForeignKey("messages.id"), unique=True)
+    primary_emotion = Column(String)
+    secondary_emotion = Column(String)
+    emotion_intensity = Column(Integer)
+    stress_level = Column(String)
+    emotional_need = Column(String)
+    risk_level = Column(String)
+    risk_details = Column(String, nullable=True)
+    selected_strategy = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 Base.metadata.create_all(bind=engine)
 
 # Fail-safe DB migrations for existing databases

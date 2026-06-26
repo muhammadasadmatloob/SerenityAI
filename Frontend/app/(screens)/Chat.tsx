@@ -614,7 +614,7 @@ export default function ChatScreen() {
         playThroughEarpieceAndroid: !isSpeakerOnRef.current,
       });
 
-      const ttsUrl = `${BACKEND_URL}/api/tts?text=${encodeURIComponent(text)}`;
+      const ttsUrl = `${BACKEND_URL}/api/tts?text=${encodeURIComponent(text)}${activeId ? `&session_id=${activeId}` : ""}`;
       
       // Load sound first to avoid network latency sync offset
       const { sound } = await Audio.Sound.createAsync(

@@ -40,3 +40,9 @@ Frontend/app-example
 Frontend/ios/
 Frontend/android/
 Frontend/.vscode/
+
+# Local database and debug files
+Backend/prompt_debug.txt
+Backend/static/qdrant_db/
+Backend/static/qdrant_test_db/
+

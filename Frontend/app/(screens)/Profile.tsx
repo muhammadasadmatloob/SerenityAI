@@ -49,7 +49,7 @@ export default function ProfileScreen() {
     }, [])
   );
 
-  if (loading) return <View className="flex-1 justify-center"><ActivityIndicator size="large" color="#808CEA" /></View>;
+  if (loading) return <View className="flex-1 justify-center bg-[#F8FAFC]"><ActivityIndicator size="large" color="#808CEA" /></View>;
 
   return (
     <SafeAreaView className="flex-1 bg-transparent">

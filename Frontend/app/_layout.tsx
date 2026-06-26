@@ -79,6 +79,11 @@ export default function RootLayout() {
   const screensWithTabBar = ["Chat", "History", "Profile"];
   const isTabBarVisible = screensWithTabBar.includes(currentScreen || "");
 
+  // 1b. Background Style Logic
+  // Certain screens use a solid white background (#F8FAFC) instead of the ambient gradient background.
+  const screensWithWhiteBg = ["Chat", "History", "Profile", "ProfileInfo", "Settings"];
+  const isWhiteBg = screensWithWhiteBg.includes(currentScreen || "");
+
   // 2. Backend URL Discovery & Auth listener initialization
   useEffect(() => {
     let unsubAuth: (() => void) | null = null;
@@ -160,7 +165,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <View className="flex-1">
         {/* Global Ambient Gradient Background or Static White Background */}
-        {!isTabBarVisible ? (
+        {!isWhiteBg ? (
           <>
             <LinearGradient 
               colors={["#55C5CC", "#808CEA", "#A48CED"]} 

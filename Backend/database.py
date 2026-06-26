@@ -38,6 +38,7 @@ class UserSession(Base):
     path = Column(String)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     duration_seconds = Column(Integer, default=0)
+    current_phase = Column(String, default="rapport_building")
 
 class Message(Base):
     __tablename__ = "messages"
@@ -65,9 +66,105 @@ class MessageAnalysis(Base):
     emotion_intensity = Column(Integer)
     stress_level = Column(String)
     emotional_need = Column(String)
+    conversation_need = Column(String, nullable=True) # New column
     risk_level = Column(String)
     risk_details = Column(String, nullable=True)
+    urgency_score = Column(Integer, default=1) # New column
     selected_strategy = Column(String)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class TherapeuticIntervention(Base):
+    __tablename__ = "therapeutic_interventions"
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"))
+    user_uid = Column(String, ForeignKey("users.firebase_uid"))
+    intervention_type = Column(String)
+    status = Column(String) # initiated, in_progress, completed
+    data = Column(Text, nullable=True) # Encrypted JSON
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class UserGoal(Base):
+    __tablename__ = "user_goals"
+    id = Column(Integer, primary_key=True, index=True)
+    user_uid = Column(String, ForeignKey("users.firebase_uid"))
+    goal = Column(Text)
+    category = Column(String)
+    progress = Column(Integer, default=0)
+    status = Column(String, default="active") # active, completed, discarded
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class SessionReflection(Base):
+    __tablename__ = "session_reflections"
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), unique=True)
+    user_uid = Column(String, ForeignKey("users.firebase_uid"))
+    breakthroughs = Column(Text, nullable=True)
+    homework = Column(Text, nullable=True)
+    homework_status = Column(String, default="pending") # pending, completed, skipped
+    next_session_focus = Column(Text, nullable=True)
+    confidence_level = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class MoodEntry(Base):
+    __tablename__ = "mood_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"))
+    user_uid = Column(String, ForeignKey("users.firebase_uid"))
+    mood_score = Column(Integer)
+    anxiety_score = Column(Integer)
+    stress_score = Column(Integer)
+    energy_score = Column(Integer)
+    confidence_score = Column(Integer)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class PersonalityProfile(Base):
+    __tablename__ = "personality_profiles"
+    id = Column(Integer, primary_key=True, index=True)
+    user_uid = Column(String, ForeignKey("users.firebase_uid"), unique=True)
+    analytical = Column(Float, default=0.5)
+    emotional = Column(Float, default=0.5)
+    action_oriented = Column(Float, default=0.5)
+    reflective = Column(Float, default=0.5)
+    avoidant = Column(Float, default=0.5)
+    social = Column(Float, default=0.5)
+    introverted = Column(Float, default=0.5)
+    extroverted = Column(Float, default=0.5)
+    confidence_data = Column(Text, nullable=True) # JSON serialized confidence levels
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class CrisisEvent(Base):
+    __tablename__ = "crisis_events"
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"))
+    user_uid = Column(String, ForeignKey("users.firebase_uid"))
+    trigger_message_id = Column(Integer, ForeignKey("messages.id"), nullable=True)
+    urgency_score = Column(Integer)
+    crisis_details = Column(Text, nullable=True)
+    action_taken = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+class TreatmentPlan(Base):
+    __tablename__ = "treatment_plans"
+    id = Column(Integer, primary_key=True, index=True)
+    user_uid = Column(String, ForeignKey("users.firebase_uid"))
+    focus_area = Column(String)
+    milestones = Column(Text, nullable=True) # JSON serialized list of milestones
+    progress = Column(Integer, default=0)
+    completion_status = Column(String, default="active") # active, completed, paused
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class SemanticMemory(Base):
+    __tablename__ = "semantic_memories_db"
+    id = Column(String, primary_key=True, index=True)
+    user_uid = Column(String, ForeignKey("users.firebase_uid"))
+    content = Column(Text)
+    memory_type = Column(String)
+    session_id = Column(Integer, nullable=True)
+    importance = Column(Integer, default=5)
+    vector_data = Column(Text)  # Serialized JSON list of floats
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 Base.metadata.create_all(bind=engine)
@@ -83,6 +180,13 @@ except Exception:
 
 try:
     with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE sessions ADD COLUMN current_phase VARCHAR DEFAULT 'rapport_building'"))
+        conn.commit()
+except Exception:
+    pass
+
+try:
+    with engine.connect() as conn:
         conn.execute(text("ALTER TABLE users ADD COLUMN path VARCHAR"))
         conn.commit()
 except Exception:
@@ -91,6 +195,20 @@ except Exception:
 try:
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE messages ADD COLUMN audio_url VARCHAR"))
+        conn.commit()
+except Exception:
+    pass
+
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE message_analyses ADD COLUMN conversation_need VARCHAR"))
+        conn.commit()
+except Exception:
+    pass
+
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE message_analyses ADD COLUMN urgency_score INTEGER DEFAULT 1"))
         conn.commit()
 except Exception:
     pass

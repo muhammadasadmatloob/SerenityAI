@@ -1,13 +1,19 @@
 import os
 import datetime
+from functools import lru_cache
 import json
 import re
 from typing import Optional, List, Dict, Any
+import logging
+import concurrent.futures
+import signal
+import threading
+import atexit
 import uvicorn
 import firebase_admin
-from fastapi import FastAPI, Depends, Header, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, Depends, Header, HTTPException, Request, UploadFile, File, Form, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import edge_tts
 import asyncio
 import io
@@ -29,6 +35,10 @@ from semantic_memory import add_semantic_memory, retrieve_semantic_memories
 
 load_dotenv()
 
+# --- LOGGING ---
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("donna_ai")
+
 # --- CONFIG ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
@@ -45,6 +55,68 @@ client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
 engine_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url=THERAPY_ENGINE_BASE_URL)
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"
+
+# --- SCHEMA VERSIONING ---
+CURRENT_SCHEMA_VERSION = "v1"
+
+def validate_schema_version(data: dict, expected: str = CURRENT_SCHEMA_VERSION) -> bool:
+    """Validate that the data schema version matches the expected version.
+    Returns True if the version matches or if no version is present (legacy data).
+    Logs a warning for mismatches so operators can plan migrations."""
+    version = data.get("schema_version")
+    if version is None:
+        logger.warning("Schema version missing from data payload — treating as legacy format.")
+        return True  # Accept legacy data gracefully
+    if version != expected:
+        logger.warning(f"Schema version mismatch: expected '{expected}', got '{version}'. Data may be processed incorrectly.")
+        return False
+    return True
+
+# --- GRACEFUL SHUTDOWN ---
+shutdown_event = threading.Event()
+_active_tasks_lock = threading.Lock()
+_active_task_count = 0
+
+def _register_task():
+    """Increment the active background task counter."""
+    global _active_task_count
+    with _active_tasks_lock:
+        _active_task_count += 1
+
+def _unregister_task():
+    """Decrement the active background task counter."""
+    global _active_task_count
+    with _active_tasks_lock:
+        _active_task_count -= 1
+
+def _graceful_shutdown(signum, frame):
+    """Signal handler for SIGTERM/SIGINT. Waits for active background tasks to drain."""
+    sig_name = signal.Signals(signum).name
+    logger.info(f"Received {sig_name} — initiating graceful shutdown...")
+    shutdown_event.set()
+    # Wait up to 30 seconds for in-flight background tasks to finish
+    deadline = 30
+    elapsed = 0
+    while elapsed < deadline:
+        with _active_tasks_lock:
+            if _active_task_count <= 0:
+                break
+        logger.info(f"Waiting for {_active_task_count} background task(s) to complete... ({elapsed}s / {deadline}s)")
+        threading.Event().wait(1)
+        elapsed += 1
+    if _active_task_count > 0:
+        logger.warning(f"Shutdown deadline reached with {_active_task_count} task(s) still running. Forcing exit.")
+    else:
+        logger.info("All background tasks completed. Shutting down cleanly.")
+    raise SystemExit(0)
+
+# Register signal handlers (only in main thread)
+try:
+    signal.signal(signal.SIGTERM, _graceful_shutdown)
+    signal.signal(signal.SIGINT, _graceful_shutdown)
+except (OSError, ValueError):
+    # signal.signal can fail if not called from the main thread (e.g., during tests)
+    pass
 
 def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format=None, force_fallback=False, default_model=None, max_tokens=None, frequency_penalty=0.0, presence_penalty=0.0, client_type: str = "groq"):
     model_to_use = ENGINE_MODEL_NAME if client_type == "engine" else (default_model if default_model else (GROQ_FALLBACK_MODEL if force_fallback else GROQ_MODEL))
@@ -68,10 +140,10 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
         res = selected_client.chat.completions.create(**kwargs, timeout=request_timeout)
         return res
     except Exception as e:
-        print(f"Completion failed for client_type={client_type}: {e}")
+        logger.error(f"Completion failed for client_type={client_type}: {e}")
         # If the fine-tuned engine on RunPod failed or timed out, fall back to Groq
         if client_type == "engine":
-            print("Falling back to Groq primary client...")
+            logger.info("Falling back to Groq primary client...")
             try:
                 kwargs["model"] = GROQ_MODEL
                 kwargs["frequency_penalty"] = frequency_penalty
@@ -81,12 +153,12 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
                 res = client.chat.completions.create(**kwargs, timeout=30.0)
                 return res
             except Exception as fallback_e:
-                print(f"Fallback to Groq also failed: {fallback_e}")
+                logger.error(f"Fallback to Groq also failed: {fallback_e}")
                 raise fallback_e
 
         # Check for rate limit error (429 or "rate limit")
         if not force_fallback and model_to_use == GROQ_MODEL and ("rate limit" in str(e).lower() or "429" in str(e).lower()):
-            print(f"Rate limit hit for primary model {GROQ_MODEL}. Retrying with fallback model {GROQ_FALLBACK_MODEL}...")
+            logger.warning(f"Rate limit hit for primary model {GROQ_MODEL}. Retrying with fallback model {GROQ_FALLBACK_MODEL}...")
             try:
                 kwargs["model"] = GROQ_FALLBACK_MODEL
                 if client_type != "engine":
@@ -97,7 +169,7 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
                 res = selected_client.chat.completions.create(**kwargs)
                 return res
             except Exception as fallback_e:
-                print(f"Fallback model also failed: {fallback_e}")
+                logger.error(f"Fallback model also failed: {fallback_e}")
                 raise fallback_e
         else:
             raise e
@@ -110,14 +182,14 @@ if not firebase_admin._apps:
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
         except Exception as e:
-            print(f"Firebase Init Warning: {e}")
+            logger.warning(f"Firebase Init Warning: {e}")
     else:
-        print("Firebase Init Warning: FIREBASE_JSON_CONTENT environment variable is missing. Trying local serviceAccountKey.json fallback...")
+        logger.warning("Firebase Init Warning: FIREBASE_JSON_CONTENT environment variable is missing. Trying local serviceAccountKey.json fallback...")
         try:
             cred = credentials.Certificate("serviceAccountKey.json")
             firebase_admin.initialize_app(cred)
         except Exception as e:
-            print(f"Firebase Fallback Init Warning: {e}")
+            logger.warning(f"Firebase Fallback Init Warning: {e}")
 
 
 app = FastAPI(title="Donna AI - FYP Backend")
@@ -132,6 +204,55 @@ app.add_middleware(
     allow_headers=["*"],
     allow_methods=["*"]
 )
+
+# --- STANDARDIZED ERROR HANDLING ---
+ERROR_MAP = {
+    401: {"message": "Your session has expired. Please log in again.", "code": "AUTH_SESSION_EXPIRED"},
+    403: {"message": "Your session has expired. Please log in again.", "code": "AUTH_SESSION_EXPIRED"},
+    404: {"message": "The requested information could not be found.", "code": "RESOURCE_NOT_FOUND"},
+    400: {"message": "The request could not be processed. Please check your input.", "code": "BAD_REQUEST"},
+    422: {"message": "The submitted data is invalid. Please check your input.", "code": "VALIDATION_ERROR"},
+    500: {"message": "We are experiencing some technical difficulties. Please try again in a few moments.", "code": "SERVER_INTERNAL_ERROR"},
+}
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    logger.error(f"HTTPException {exc.status_code}: {exc.detail} | Path: {request.url.path}")
+    error_info = ERROR_MAP.get(exc.status_code, {
+        "message": "An unexpected error occurred. Please try again.",
+        "code": "UNKNOWN_ERROR"
+    })
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"success": False, "message": error_info["message"], "code": error_info["code"]}
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled Exception: {type(exc).__name__}: {exc} | Path: {request.url.path}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "message": "We are experiencing some technical difficulties. Please try again in a few moments.",
+            "code": "SERVER_INTERNAL_ERROR"
+        }
+    )
+
+# --- PASSWORD VALIDATION ---
+def validate_password(password: str) -> bool:
+    """Enforce strict password policy: 8+ chars, upper, lower, digit, special."""
+    if len(password) < 8:
+        return False
+    if not re.search(r'[A-Z]', password):
+        return False
+    if not re.search(r'[a-z]', password):
+        return False
+    if not re.search(r'[0-9]', password):
+        return False
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False
+    return True
 
 def encrypt(t: str) -> str:
     return cipher.encrypt(t.encode()).decode() if t else ""
@@ -193,9 +314,26 @@ class TreatmentPlanCreate(BaseModel):
     milestones: List[dict]
     progress: Optional[int] = 0
 
+class PasswordCheck(BaseModel):
+    password: str
+
 @app.get("/")
 def home():
     return {"status": "Donna AI Backend is Online"}
+
+@app.post("/api/auth/validate-password")
+def check_password_strength(data: PasswordCheck):
+    """Validate password strength before signup or password reset."""
+    if not validate_password(data.password):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "message": "Password must be at least 8 characters, and include an uppercase letter, a lowercase letter, a number, and a special character.",
+                "code": "INVALID_PASSWORD_FORMAT"
+            }
+        )
+    return {"success": True, "message": "Password meets all requirements.", "code": "PASSWORD_VALID"}
 
 @app.post("/api/transcribe")
 def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_current_uid)):
@@ -220,7 +358,7 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
             
         return {"transcript": translation.text}
     except Exception as e:
-        print(f"Transcription Error: {e}")
+        logger.error(f"Transcription Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 def get_tts_parameters(parsed_data: dict) -> tuple:
@@ -276,7 +414,7 @@ async def text_to_speech(text: str, session_id: Optional[str] = None, db: Sessio
         try:
             session_id_int = int(session_id)
         except ValueError:
-            print(f"TTS: session_id {session_id!r} could not be parsed to integer. Ignoring.")
+            logger.warning(f"TTS: session_id {session_id!r} could not be parsed to integer. Ignoring.")
     
     if session_id_int is not None:
         try:
@@ -293,7 +431,7 @@ async def text_to_speech(text: str, session_id: Optional[str] = None, db: Sessio
                     }
                     rate_adjust, pitch_adjust = get_tts_parameters(mock_data)
         except Exception as e:
-            print(f"Error resolving TTS parameters for session {session_id_int}: {e}")
+            logger.error(f"Error resolving TTS parameters for session {session_id_int}: {e}")
             
     # Connection Retry Logic with buffering to avoid partial/corrupt stream yielding
     audio_data = b""
@@ -311,7 +449,7 @@ async def text_to_speech(text: str, session_id: Optional[str] = None, db: Sessio
                 break
         except Exception as e:
             last_err = e
-            print(f"TTS Error on attempt {attempt + 1}: {e}")
+            logger.error(f"TTS Error on attempt {attempt + 1}: {e}")
             if attempt < max_attempts - 1:
                 await asyncio.sleep(0.5)
 
@@ -362,6 +500,7 @@ def compile_past_sessions_summary(uid: str, current_session_id: int, db: Session
     summary_text += "\n".join(past_summaries)
     return summary_text
 
+@lru_cache(maxsize=32)
 def get_path_style_guidelines(path: str) -> str:
     if path == "logical":
         return (
@@ -395,18 +534,20 @@ def get_path_style_guidelines(path: str) -> str:
 
 def parse_llm_response(raw_response: str) -> dict:
     raw_response = raw_response.strip()
+    parsed = None
     try:
-        return json.loads(raw_response)
+        parsed = json.loads(raw_response)
     except Exception:
         try:
             match = re.search(r"\{.*\}", raw_response, re.DOTALL)
             if match:
-                return json.loads(match.group(0))
+                parsed = json.loads(match.group(0))
         except Exception:
             pass
-        
+    
+    if parsed is None:
         # Absolute fallback structure if JSON parsing fails completely
-        return {
+        parsed = {
             "emotion_analysis": {
                 "primary_emotion": "Neutral",
                 "secondary_emotion": "None",
@@ -430,9 +571,17 @@ def parse_llm_response(raw_response: str) -> dict:
             "therapy_strategy": "Compassionate general counseling",
             "therapeutic_response": "I'm taking a moment to process what you've shared. Please, continue."
         }
+    
+    # Stamp schema version on every parsed payload for downstream validation
+    parsed.setdefault("schema_version", CURRENT_SCHEMA_VERSION)
+    return parsed
 
 def save_message_analysis(db: Session, message_id: int, analysis_data: dict):
     try:
+        # Validate schema version before processing
+        if not validate_schema_version(analysis_data):
+            logger.warning(f"Proceeding with schema-mismatched analysis data for message {message_id}")
+        
         emotion = analysis_data.get("emotion_analysis", {})
         risk = analysis_data.get("risk_analysis", {})
         strategy = analysis_data.get("therapy_strategy", "Compassionate general counseling")
@@ -453,7 +602,7 @@ def save_message_analysis(db: Session, message_id: int, analysis_data: dict):
         db.add(analysis)
         db.commit()
     except Exception as e:
-        print(f"Error saving message analysis: {e}")
+        logger.error(f"Error saving message analysis: {e}")
         db.rollback()
 
 def compile_past_sessions_summary_v2(uid: str, current_session_id: int, db: Session) -> str:
@@ -484,7 +633,7 @@ def compile_past_sessions_summary_v2(uid: str, current_session_id: int, db: Sess
             )
             compiled_memories.append(summary_text)
         except Exception as e:
-            print(f"Error parsing session summary: {e}")
+            logger.error(f"Error parsing session summary: {e}")
             continue
             
     if not compiled_memories:
@@ -527,6 +676,107 @@ def resolve_combined_emotion(text_emotion: str, voice_emotion: str) -> str:
         return voice_emotion
     return text_emotion
 
+def validate_session_integrity(db: Session, uid: str, session_id: int) -> UserSession:
+    sess = db.query(UserSession).filter_by(id=session_id, user_uid=uid).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found or access denied")
+    if sess.created_at:
+        age_seconds = (datetime.datetime.utcnow() - sess.created_at).total_seconds()
+        if age_seconds > 86400:
+            raise HTTPException(status_code=400, detail="Session has expired")
+    return sess
+
+def hybrid_ai_router(messages, current_phase: str, path: str = None, response_format=None) -> Any:
+    # 1. Casual path only routes to Groq for speed and cost efficiency
+    if path == "casual":
+        logger.info("Hybrid AI Router: Casual path, routing to Groq only...")
+        return safe_groq_completion(
+            messages=messages,
+            temperature=0.6,
+            top_p=0.95,
+            response_format=response_format,
+            client_type="groq"
+        )
+
+    # 2. For therapeutic phases, concurrently run Groq and the RunPod Fine-Tuned Engine
+    logger.info(f"Hybrid AI Router: Starting concurrent blend of Groq + RunPod Fine-Tuned Engine (Phase: '{current_phase}')...")
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        # Submit tasks in parallel
+        future_groq = executor.submit(
+            safe_groq_completion,
+            messages=messages,
+            temperature=0.6,
+            top_p=0.95,
+            response_format=response_format,
+            client_type="groq"
+        )
+        future_engine = executor.submit(
+            safe_groq_completion,
+            messages=messages,
+            temperature=0.6,
+            top_p=0.95,
+            client_type="engine"
+        )
+        
+        res_groq = None
+        res_engine = None
+        
+        # We enforce a timeout (e.g. 10 seconds) on the engine to avoid hanging if RunPod is down/sleeping.
+        try:
+            res_groq = future_groq.result(timeout=10.0)
+        except Exception as e:
+            logger.error(f"Groq parallel call failed: {e}")
+            
+        try:
+            res_engine = future_engine.result(timeout=10.0)
+        except Exception as e:
+            logger.error(f"RunPod Engine parallel call failed/timed out: {e}")
+
+    # Case 1: Both succeeded - merge their replies
+    if res_groq and res_engine:
+        try:
+            parsed_groq = parse_llm_response(res_groq.choices[0].message.content or "")
+            parsed_engine = parse_llm_response(res_engine.choices[0].message.content or "")
+            
+            groq_text = parsed_groq.get("therapeutic_response", "").strip()
+            engine_text = parsed_engine.get("therapeutic_response", "").strip()
+            
+            # Combine the two responses
+            if groq_text and engine_text:
+                merged_text = f"{groq_text} {engine_text}"
+            else:
+                merged_text = engine_text or groq_text
+                
+            parsed_groq["therapeutic_response"] = merged_text
+            res_groq.choices[0].message.content = json.dumps(parsed_groq)
+            logger.info("Hybrid AI Router: Successfully blended Groq and RunPod responses.")
+            return res_groq
+        except Exception as e:
+            logger.error(f"Failed to merge parallel responses: {e}. Defaulting to Groq response.")
+            return res_groq
+
+    # Case 2: Only Groq succeeded (normal fallback)
+    if res_groq:
+        logger.info("Hybrid AI Router: RunPod Engine failed/timed out. Returning Groq response only.")
+        return res_groq
+
+    # Case 3: Only Engine succeeded
+    if res_engine:
+        logger.info("Hybrid AI Router: Groq failed. Returning parsed RunPod Engine response.")
+        return res_engine
+
+    # Case 4: Both failed - fallback to a synchronous Groq query
+    logger.warning("Hybrid AI Router: Both parallel calls failed. Retrying with synchronous Groq...")
+    return safe_groq_completion(
+        messages=messages,
+        temperature=0.6,
+        top_p=0.95,
+        response_format=response_format,
+        client_type="groq"
+    )
+
+@lru_cache(maxsize=32)
 def get_phase_guidelines(phase: str) -> str:
     phases = {
         "rapport_building": (
@@ -655,7 +905,7 @@ def compile_session_continuity_context(uid: str, initial_query: str, db: Session
         try:
             retrieved_mems = retrieve_semantic_memories(uid, initial_query.strip(), limit=3)
         except Exception as e:
-            print(f"Failed to retrieve semantic memories: {e}")
+            logger.error(f"Failed to retrieve semantic memories: {e}")
     context["semantic_memories"] = [f"- {m['content']} (Type: {m['memory_type']})" for m in retrieved_mems]
     
     return context
@@ -834,7 +1084,7 @@ def process_therapeutic_pipeline(db: Session, session_id: int, uid: str, user_ms
                 try:
                     add_semantic_memory(uid, m_content, m_type, session_id, m_importance)
                 except Exception as e:
-                    print(f"Failed to add semantic memory in background pipeline: {e}")
+                    logger.error(f"Failed to add semantic memory in background pipeline: {e}")
 
 def get_system_prompt_v2(
     user_name: str, 
@@ -1111,7 +1361,48 @@ def get_summary_generation_prompt(conversation_history: str, past_summary: str =
     )
     return prompt
 
+def task(func):
+    """Decorator to tag background pipeline functions as tasks
+    for an asynchronous task runner (like ARQ or Celery).
+    """
+    func.is_background_task = True
+    return func
+
+@task
+def run_background_pipeline(session_id: int, user_uid: str, user_msg_id: int, parsed_data: dict):
+    """Shutdown-aware background pipeline with task tracking.
+    
+    Also compatible with async task queues (ARQ / Celery) — see arq_tasks.py scaffold.
+    """
+    if shutdown_event.is_set():
+        logger.warning(f"Shutdown in progress — skipping background pipeline for session {session_id}")
+        return
+    
+    _register_task()
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        save_message_analysis(db, user_msg_id, parsed_data)
+        process_therapeutic_pipeline(db, session_id, user_uid, user_msg_id, parsed_data)
+    except Exception as e:
+        logger.error(f"Error in run_background_pipeline: {e}")
+        db.rollback()
+    finally:
+        db.close()
+        
+    # Then update session summary (skip if shutting down)
+    if not shutdown_event.is_set():
+        update_session_summary_task(session_id, user_uid)
+    
+    _unregister_task()
+
 def update_session_summary_task(session_id: int, uid: str):
+    """Generate / update the encrypted session summary. Shutdown-aware."""
+    if shutdown_event.is_set():
+        logger.warning(f"Shutdown in progress — skipping summary update for session {session_id}")
+        return
+    
+    _register_task()
     from database import SessionLocal
     db = SessionLocal()
     try:
@@ -1158,10 +1449,12 @@ def update_session_summary_task(session_id: int, uid: str):
         )
         raw_summary = res.choices[0].message.content or ""
         
-        # Verify it parses as JSON
-        json.loads(raw_summary)
+        # Verify it parses as JSON, then stamp with schema version
+        summary_obj = json.loads(raw_summary)
+        summary_obj["schema_version"] = CURRENT_SCHEMA_VERSION
+        raw_summary = json.dumps(summary_obj)
         
-        # Encrypt the summary
+        # Encrypt the versioned summary
         encrypted_summary = encrypt(raw_summary)
         
         if existing_summary:
@@ -1174,12 +1467,13 @@ def update_session_summary_task(session_id: int, uid: str):
             )
             db.add(new_summary)
         db.commit()
-        print(f"Successfully updated summary for session {session_id}")
+        logger.info(f"Successfully updated summary for session {session_id}")
     except Exception as e:
-        print(f"Error in update_session_summary_task: {e}")
+        logger.error(f"Error in update_session_summary_task: {e}")
         db.rollback()
     finally:
         db.close()
+        _unregister_task()
 
 @app.post("/api/session/start")
 def start_sess(
@@ -1214,6 +1508,21 @@ def start_sess(
     else:
         path_to_use = "casual"  # Default fallback
         
+    # --- Mood/Feeling Locking: Reuse existing session if one was already started today ---
+    today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    existing_today = db.query(UserSession).filter(
+        UserSession.user_uid == uid,
+        UserSession.created_at >= today_start
+    ).order_by(UserSession.created_at.desc()).first()
+    
+    if existing_today:
+        last_ai_msg = db.query(Message).filter_by(
+            session_id=existing_today.id, role="assistant"
+        ).order_by(Message.timestamp.desc()).first()
+        first_message = decrypt(last_ai_msg.content) if last_ai_msg else "Welcome back. Let's continue where we left off."
+        logger.info(f"Mood locked: Returning existing session {existing_today.id} for user {uid}")
+        return {"session_id": existing_today.id, "first_message": first_message}
+
     new_sess = UserSession(user_uid=uid, mood=data.mood, path=path_to_use)
     db.add(new_sess)
     db.commit()
@@ -1284,14 +1593,11 @@ def start_sess(
         messages.append({"role": "user", "content": f"Hello Donna, I am feeling {mood_str}."})
     
     try:
-        res = safe_groq_completion(
+        res = hybrid_ai_router(
             messages=messages,
-            temperature=0.6,
-            top_p=0.95,
-            response_format={"type": "json_object"},
-            frequency_penalty=0.6,
-            presence_penalty=0.6,
-            client_type="engine"
+            current_phase="rapport_building",
+            path=path_to_use,
+            response_format={"type": "json_object"}
         )
         raw_reply = res.choices[0].message.content or ""
         parsed_data = parse_llm_response(raw_reply)
@@ -1331,16 +1637,13 @@ def start_sess(
         db.add(ai_msg)
         db.commit()
         
-        # Save MessageAnalysis & trigger pipeline updates if user message was logged
+        # Save MessageAnalysis & trigger pipeline updates in background
         if user_msg_id is not None:
-            save_message_analysis(db, user_msg_id, parsed_data)
-            process_therapeutic_pipeline(db, session_id_val, uid, user_msg_id, parsed_data)
-            # Enqueue background task to update the session summary
-            background_tasks.add_task(update_session_summary_task, session_id_val, uid)
+            background_tasks.add_task(run_background_pipeline, session_id_val, uid, user_msg_id, parsed_data)
             
         return {"session_id": session_id_val, "first_message": ai_msg_text}
     except Exception as e:
-        print(f"Groq Error: {e}")
+        logger.error(f"Groq Error: {e}")
         db.rollback()
         # Save fallback AI reply acknowledging the mood
         mood_str = data.mood.strip().lower()
@@ -1360,9 +1663,7 @@ def chat_node(
     uid: str = Depends(get_current_uid), 
     db: Session = Depends(get_db)
 ):
-    sess = db.query(UserSession).filter_by(id=data.session_id, user_uid=uid).first()
-    if not sess:
-        raise HTTPException(status_code=404, detail="Session not found")
+    sess = validate_session_integrity(db, uid, data.session_id)
     
     # Update active duration if provided
     if data.duration_seconds is not None:
@@ -1431,9 +1732,22 @@ def chat_node(
     sess.current_phase = current_phase
     db.commit()
 
-    # Load up to the last 60 messages in the current session for deep conversation context memory
-    raw_msgs = db.query(Message).filter_by(session_id=data.session_id).order_by(Message.timestamp.desc()).limit(60).all()
-    context = [{"role": m.role, "content": decrypt(m.content)} for m in reversed(raw_msgs)]
+    # Memory Window Optimization
+    # Always include the very first user message of the session (to keep the core concern in focus)
+    first_user_msg = db.query(Message).filter_by(session_id=data.session_id, role="user").order_by(Message.timestamp.asc()).first()
+    
+    # Include the last 20 messages for recent conversational flow
+    last_20_msgs = db.query(Message).filter_by(session_id=data.session_id).order_by(Message.timestamp.desc()).limit(20).all()
+    last_20_msgs = list(reversed(last_20_msgs))
+    
+    context = []
+    if first_user_msg:
+        in_last_20 = any(m.id == first_user_msg.id for m in last_20_msgs)
+        if not in_last_20:
+            context.append({"role": "user", "content": decrypt(first_user_msg.content)})
+            
+    for m in last_20_msgs:
+        context.append({"role": m.role, "content": decrypt(m.content)})
     
     user = db.query(User).filter_by(firebase_uid=uid).first()
     name = user.name if (user and user.name) else "Friend"
@@ -1463,14 +1777,11 @@ def chat_node(
     )
 
     try:
-        res = safe_groq_completion(
+        res = hybrid_ai_router(
             messages=[{"role": "system", "content": system_prompt}] + context,
-            temperature=0.6,
-            top_p=0.95,
-            response_format={"type": "json_object"},
-            frequency_penalty=0.6,
-            presence_penalty=0.6,
-            client_type="engine"
+            current_phase=current_phase,
+            path=sess.path,
+            response_format={"type": "json_object"}
         )
         raw_reply = res.choices[0].message.content or ""
         parsed_data = parse_llm_response(raw_reply)
@@ -1508,18 +1819,12 @@ def chat_node(
         db.add(Message(session_id=data.session_id, role="assistant", content=encrypt(ai_msg_text)))
         db.commit()
         
-        # Save MessageAnalysis for the user message
-        save_message_analysis(db, user_msg.id, parsed_data)
-
-        # Run pipeline updates
-        process_therapeutic_pipeline(db, data.session_id, uid, user_msg.id, parsed_data)
-        
-        # Enqueue background task to update the session summary
-        background_tasks.add_task(update_session_summary_task, data.session_id, uid)
+        # Enqueue background task to run the pipeline updates and session summary
+        background_tasks.add_task(run_background_pipeline, data.session_id, uid, user_msg.id, parsed_data)
         
         return {"reply": ai_msg_text}
     except Exception as e:
-        print(f"Chat Error: {e}")
+        logger.error(f"Chat Error: {e}")
         fallback_reply = "I'm listening, but my connection is a bit slow. Please go on."
         return {"reply": fallback_reply}
 
@@ -1532,9 +1837,7 @@ async def chat_voice(
     uid: str = Depends(get_current_uid),
     db: Session = Depends(get_db)
 ):
-    sess = db.query(UserSession).filter_by(id=session_id, user_uid=uid).first()
-    if not sess:
-        raise HTTPException(status_code=404, detail="Session not found")
+    sess = validate_session_integrity(db, uid, session_id)
     
     # 1. Update duration if provided
     if duration_seconds is not None:
@@ -1568,7 +1871,7 @@ async def chat_voice(
         except Exception:
             pass
     except Exception as e:
-        print(f"Voice chat transcription failed: {e}")
+        logger.error(f"Voice chat transcription failed: {e}")
         raise HTTPException(status_code=500, detail="Voice transcription failed.")
 
     if not user_text.strip():
@@ -1665,9 +1968,22 @@ async def chat_voice(
     sess.current_phase = current_phase
     db.commit()
 
-    # Fetch chat history and generate AI reply
-    raw_msgs = db.query(Message).filter_by(session_id=session_id).order_by(Message.timestamp.desc()).limit(60).all()
-    context = [{"role": m.role, "content": decrypt(m.content)} for m in reversed(raw_msgs)]
+    # Memory Window Optimization
+    # Always include the very first user message of the session (to keep the core concern in focus)
+    first_user_msg = db.query(Message).filter_by(session_id=session_id, role="user").order_by(Message.timestamp.asc()).first()
+    
+    # Include the last 20 messages for recent conversational flow
+    last_20_msgs = db.query(Message).filter_by(session_id=session_id).order_by(Message.timestamp.desc()).limit(20).all()
+    last_20_msgs = list(reversed(last_20_msgs))
+    
+    context = []
+    if first_user_msg:
+        in_last_20 = any(m.id == first_user_msg.id for m in last_20_msgs)
+        if not in_last_20:
+            context.append({"role": "user", "content": decrypt(first_user_msg.content)})
+            
+    for m in last_20_msgs:
+        context.append({"role": m.role, "content": decrypt(m.content)})
     
     user = db.query(User).filter_by(firebase_uid=uid).first()
     name = user.name if (user and user.name) else "Friend"
@@ -1710,14 +2026,11 @@ async def chat_voice(
     system_prompt += voice_context_inject
 
     try:
-        res = safe_groq_completion(
+        res = hybrid_ai_router(
             messages=[{"role": "system", "content": system_prompt}] + context,
-            temperature=0.6,
-            top_p=0.95,
-            response_format={"type": "json_object"},
-            frequency_penalty=0.6,
-            presence_penalty=0.6,
-            client_type="engine"
+            current_phase=current_phase,
+            path=sess.path,
+            response_format={"type": "json_object"}
         )
         raw_reply = res.choices[0].message.content or ""
         parsed_data = parse_llm_response(raw_reply)
@@ -1763,11 +2076,8 @@ async def chat_voice(
         db.commit()
         db.refresh(ai_msg)
 
-        # Save MessageAnalysis for the user message if Groq succeeded
-        save_message_analysis(db, user_msg.id, parsed_data)
-        process_therapeutic_pipeline(db, session_id, uid, user_msg.id, parsed_data)
-        # Enqueue background task to update the session summary
-        background_tasks.add_task(update_session_summary_task, session_id, uid)
+        # Enqueue background task to run the pipeline updates and session summary
+        background_tasks.add_task(run_background_pipeline, session_id, uid, user_msg.id, parsed_data)
 
         # 7. Generate TTS audio for the AI reply using edge-tts and save persistently
         ai_audio_filename = f"ai_{ai_msg.id}.mp3"
@@ -1783,7 +2093,7 @@ async def chat_voice(
                 tts_success = True
                 break
             except Exception as e:
-                print(f"Voice chat TTS synthesis failed on attempt {attempt + 1}: {e}")
+                logger.error(f"Voice chat TTS synthesis failed on attempt {attempt + 1}: {e}")
                 if attempt < max_attempts - 1:
                     await asyncio.sleep(0.5)
                     
@@ -1805,7 +2115,7 @@ async def chat_voice(
         }
 
     except Exception as e:
-        print(f"Voice chat Groq completion failed: {e}")
+        logger.error(f"Voice chat Groq completion failed: {e}")
         ai_reply = "I'm listening, but my connection is a bit slow. Please go on."
         return {
             "user_message": {
@@ -1884,7 +2194,7 @@ def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_uid), d
         if len(cleaned_suggestions) >= 2:
             return cleaned_suggestions[:4]
     except Exception as e:
-        print(f"Suggestions Generation Error: {e}")
+        logger.error(f"Suggestions Generation Error: {e}")
         
     return [
         "I'm feeling overwhelmed today.",
@@ -1895,16 +2205,12 @@ def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_uid), d
 
 @app.get("/api/session/duration/{session_id}")
 def get_duration(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
-    sess = db.query(UserSession).filter_by(id=session_id, user_uid=uid).first()
-    if not sess:
-        raise HTTPException(status_code=404, detail="Session not found")
+    sess = validate_session_integrity(db, uid, session_id)
     return {"duration_seconds": sess.duration_seconds or 0}
 
 @app.post("/api/session/duration")
 def update_duration(data: DurationUpdate, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
-    sess = db.query(UserSession).filter_by(id=data.session_id, user_uid=uid).first()
-    if not sess:
-        raise HTTPException(status_code=404, detail="Session not found")
+    sess = validate_session_integrity(db, uid, data.session_id)
     sess.duration_seconds = data.duration_seconds
     db.commit()
     return {"duration_seconds": sess.duration_seconds}
@@ -2142,7 +2448,7 @@ def get_mood_summary(period: str = "weekly", uid: str = Depends(get_current_uid)
         )
         insights = res.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Failed to generate mood summary insights: {e}")
+        logger.error(f"Failed to generate mood summary insights: {e}")
         insights = "You've been tracking your mood, showing great self-awareness. Let's keep exploring your patterns in our next session."
 
     return {
@@ -2202,4 +2508,5 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
         return {"status": "created", "plan_id": new_plan.id}
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    logger.info(f"Starting Donna AI Backend | Schema: {CURRENT_SCHEMA_VERSION} | Shutdown handlers: registered")
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

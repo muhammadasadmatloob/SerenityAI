@@ -3,7 +3,7 @@ import datetime
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Text, Float
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, validates
 
 load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -39,6 +39,12 @@ class UserSession(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     duration_seconds = Column(Integer, default=0)
     current_phase = Column(String, default="rapport_building")
+
+    @validates('mood')
+    def validate_mood(self, key, value):
+        if self.mood is not None:
+            return self.mood
+        return value
 
 class Message(Base):
     __tablename__ = "messages"

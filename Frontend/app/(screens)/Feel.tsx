@@ -241,7 +241,8 @@ export default function FeelScreen() {
                 return (
                   <Pressable
                     key={item.id}
-                    onPress={() => setSelectedMood(item.id)}
+                    onPress={() => !isStartingSession && setSelectedMood(item.id)}
+                    disabled={isStartingSession}
                     style={{ width: "29%", aspectRatio: 1 }}
                   >
                     <MotiView
@@ -296,11 +297,12 @@ export default function FeelScreen() {
                 onChangeText={setDescription}
                 multiline
                 numberOfLines={2}
+                editable={!isStartingSession}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 style={{ maxHeight: 80 }}
               />
-              <TouchableOpacity onPress={toggleVoiceInput} activeOpacity={0.86}>
+              <TouchableOpacity onPress={toggleVoiceInput} disabled={isStartingSession} activeOpacity={0.86}>
                 <LinearGradient
                   colors={["#808CEA", "#A48CED"]}
                   start={{ x: 0, y: 0 }}

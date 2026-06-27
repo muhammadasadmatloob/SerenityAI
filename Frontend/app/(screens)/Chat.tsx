@@ -56,6 +56,15 @@ const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sende
 
   const handlePlayPause = async () => {
     try {
+      // Ensure the correct audio mode is set to successfully acquire audio focus from the OS
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
       if (sound) {
         if (isPlaying) {
           await sound.pauseAsync();

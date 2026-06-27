@@ -34,6 +34,31 @@ const WAVEFORM_HEIGHTS = [
   12, 16, 10, 6
 ]; // 24 elements with nice wave shapes
 
+const clearRecordingOptions = {
+  android: {
+    extension: '.m4a',
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+  },
+  ios: {
+    extension: '.m4a',
+    audioQuality: Audio.IOSAudioQuality.HIGH,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {
+    mimeType: 'audio/webm',
+    bitsPerSecond: 128000,
+  },
+};
+
 const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sender }) => {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -711,7 +736,7 @@ export default function ChatScreen() {
       setCallRecording(null);
 
       const recordingOptions = {
-        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        ...clearRecordingOptions,
         isMeteringEnabled: true,
       };
 
@@ -975,7 +1000,7 @@ export default function ChatScreen() {
         playThroughEarpieceAndroid: false,
       });
 
-      const recordingOptions = Audio.RecordingOptionsPresets.HIGH_QUALITY;
+      const recordingOptions = clearRecordingOptions;
       const { recording } = await Audio.Recording.createAsync(recordingOptions);
       
       voiceMsgRecordingRef.current = recording;

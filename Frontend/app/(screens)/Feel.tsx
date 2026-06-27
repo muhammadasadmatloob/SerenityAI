@@ -23,7 +23,30 @@ import { Audio } from "expo-av";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
 
-const { width } = Dimensions.get("window");
+const clearRecordingOptions = {
+  android: {
+    extension: '.m4a',
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+  },
+  ios: {
+    extension: '.m4a',
+    audioQuality: Audio.IOSAudioQuality.HIGH,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: {
+    mimeType: 'audio/webm',
+    bitsPerSecond: 128000,
+  },
+};
 
 const therapistMoods = [
   { id: "anxious", emoji: "😰", label: "Anxious" },
@@ -83,7 +106,7 @@ export default function FeelScreen() {
       });
 
       const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+        clearRecordingOptions
       );
       setRecording(newRecording);
       setIsListening(true);

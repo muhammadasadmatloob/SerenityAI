@@ -71,17 +71,13 @@ const getDevServerIp = (): string | null => {
 
 const devIp = getDevServerIp();
 
+export const PRODUCTION_URL = "https://serenityai-93qt.onrender.com";
+
 // Initial URL setup (fallback defaults)
-let initialUrl = "http://192.168.0.41:8000";
-if (Platform.OS === 'android' && !devIp) {
-  initialUrl = "http://10.0.2.2:8000"; // Android Emulator loopback
-} else if (Platform.OS === 'ios' && !devIp) {
-  initialUrl = "http://localhost:8000"; // iOS Simulator loopback
-} else if (devIp) {
-  initialUrl = `http://${devIp}:8000`;
-}
+let initialUrl = PRODUCTION_URL;
 
 export let BACKEND_URL = initialUrl;
+
 
 export const setBackendUrl = (url: string) => {
   BACKEND_URL = url;
@@ -124,15 +120,24 @@ export const waitForBackendDiscovery = () => discoveryPromise;
 // Autodiscovery function
 const runAutoDiscovery = async () => {
   try {
+    // 0. Prioritize the Render production backend URL first (with a longer timeout to allow cold start / spin up)
+    console.log("🔎 config: Trying Render production backend URL (allowing spin-up):", PRODUCTION_URL);
+    if (await checkBackendOnline(PRODUCTION_URL, 15000)) {
+      setBackendUrl(PRODUCTION_URL);
+      await AsyncStorage.setItem(STORAGE_KEY, PRODUCTION_URL);
+      return;
+    }
+
     // 1. Try to load cached successful URL from AsyncStorage
     const cachedUrl = await AsyncStorage.getItem(STORAGE_KEY);
-    if (cachedUrl) {
+    if (cachedUrl && cachedUrl !== PRODUCTION_URL) {
       console.log("🔎 config: Trying cached backend URL:", cachedUrl);
       if (await checkBackendOnline(cachedUrl, 2000)) {
         setBackendUrl(cachedUrl);
         return;
       }
     }
+
 
     // 2. Try the resolved dev server IP
     if (devIp) {
@@ -221,7 +226,9 @@ const runAutoDiscovery = async () => {
 // If offline, it triggers a subnet sweep.
 export const verifyAndDiscover = async () => {
   console.log("🔍 config: Checking backend status at current BACKEND_URL:", BACKEND_URL);
-  const isOnline = await checkBackendOnline(BACKEND_URL, 2000);
+  const checkTimeout = BACKEND_URL === PRODUCTION_URL ? 5000 : 2000;
+  const isOnline = await checkBackendOnline(BACKEND_URL, checkTimeout);
+
   if (isOnline) {
     console.log("✅ config: Backend is online, no discovery needed.");
     // Cache the URL

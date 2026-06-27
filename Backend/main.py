@@ -103,11 +103,22 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
             raise e
 
 if not firebase_admin._apps:
-    try:
-        cred = credentials.Certificate("serviceAccountKey.json")
-        firebase_admin.initialize_app(cred)
-    except Exception as e:
-        print(f"Firebase Init Warning: {e}")
+    firebase_json = os.getenv("FIREBASE_JSON_CONTENT")
+    if firebase_json:
+        try:
+            cred_dict = json.loads(firebase_json)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+        except Exception as e:
+            print(f"Firebase Init Warning: {e}")
+    else:
+        print("Firebase Init Warning: FIREBASE_JSON_CONTENT environment variable is missing. Trying local serviceAccountKey.json fallback...")
+        try:
+            cred = credentials.Certificate("serviceAccountKey.json")
+            firebase_admin.initialize_app(cred)
+        except Exception as e:
+            print(f"Firebase Fallback Init Warning: {e}")
+
 
 app = FastAPI(title="Donna AI - FYP Backend")
 

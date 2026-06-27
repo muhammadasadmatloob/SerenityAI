@@ -12,9 +12,10 @@ serviceAccountKey.json
 Backend/.env
 Backend/serviceAccountKey.json
 Backend/venv/
-Backend/__pycache__/
-Backend/*.pyc
+**/__pycache__/
+**/*.pyc
 Backend/static/audio/*
+
 !Backend/static/audio/.gitkeep
 
 # Frontend exclusions

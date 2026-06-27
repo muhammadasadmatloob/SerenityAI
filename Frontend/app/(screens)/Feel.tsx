@@ -105,6 +105,9 @@ export default function FeelScreen() {
         playsInSilentModeIOS: true,
       });
 
+      // Allow the OS audio routing to settle before starting recording hardware
+      await new Promise(resolve => setTimeout(resolve, 150));
+
       const { recording: newRecording } = await Audio.Recording.createAsync(
         clearRecordingOptions
       );

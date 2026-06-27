@@ -779,6 +779,9 @@ export default function ChatScreen() {
         }
       };
 
+      // Allow the OS audio routing to settle before starting recording hardware
+      await new Promise(resolve => setTimeout(resolve, 150));
+
       const { recording } = await Audio.Recording.createAsync(
         recordingOptions,
         onRecordingStatusUpdate,
@@ -1011,6 +1014,9 @@ export default function ChatScreen() {
         staysActiveInBackground: false,
         playThroughEarpieceAndroid: false,
       });
+
+      // Allow the OS audio routing to settle before starting recording hardware
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       const recordingOptions = clearRecordingOptions;
       const { recording } = await Audio.Recording.createAsync(recordingOptions);

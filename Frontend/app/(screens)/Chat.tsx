@@ -518,7 +518,19 @@ export default function ChatScreen() {
   };
 
   const handleEnd = async () => {
-    await syncFinalDuration();
+    try {
+      await syncFinalDuration();
+      if (activeId) {
+        const user = auth.currentUser;
+        const token = await user?.getIdToken();
+        await fetch(`${BACKEND_URL}/api/session/end/${activeId}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+    } catch (e) {
+      console.log("Failed to end session on backend", e);
+    }
     router.replace("/(screens)/Feel");
   };
 

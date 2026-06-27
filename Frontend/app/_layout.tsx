@@ -35,7 +35,7 @@ import { useEffect, useState, useRef } from "react";
 import { Text, View, Dimensions, Image, StyleSheet } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { auth, db } from "../firebase/firebase"; 
-import { waitForBackendDiscovery } from "../constants/config";
+import { waitForBackendDiscovery, BACKEND_URL } from "../constants/config";
 import "../global.css";
 import TabBar from "./(components)/TabBar";
 
@@ -108,6 +108,14 @@ export default function RootLayout() {
         }
 
         if (user) {
+          // Clean up any stale active sessions from a previous run to ensure a fresh startup session
+          user.getIdToken().then((token) => {
+            fetch(`${BACKEND_URL}/api/session/end-all-active`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` }
+            }).catch((err) => console.log("Failed to auto-end leftover sessions", err));
+          });
+
           // Listen to the user's document for real-time profile completion status
           unsubSnap.current = onSnapshot(doc(db, "users", user.uid), (snap) => {
             setIsProfileComplete(!!(snap.exists() && snap.data()?.name));

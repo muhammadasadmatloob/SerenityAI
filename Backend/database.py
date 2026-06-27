@@ -1,7 +1,7 @@
 import os
 import datetime
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Text, Float
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey, Text, Float, Boolean, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, validates
 
@@ -14,6 +14,20 @@ if "sslmode=" not in DATABASE_URL:
     DATABASE_URL += "?sslmode=require"
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+
+# Run automatic migration check for new is_ended column
+from sqlalchemy import inspect
+try:
+    inspector = inspect(engine)
+    if 'sessions' in inspector.get_table_names():
+        columns = [c['name'] for c in inspector.get_columns('sessions')]
+        if 'is_ended' not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE sessions ADD COLUMN is_ended BOOLEAN DEFAULT FALSE"))
+                conn.commit()
+except Exception as e:
+    print(f"Automatic migration notice: {e}")
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -39,6 +53,7 @@ class UserSession(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     duration_seconds = Column(Integer, default=0)
     current_phase = Column(String, default="rapport_building")
+    is_ended = Column(Boolean, default=False)
 
     @validates('mood')
     def validate_mood(self, key, value):

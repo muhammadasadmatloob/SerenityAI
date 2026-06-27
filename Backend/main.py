@@ -461,7 +461,7 @@ async def text_to_speech(text: str, session_id: Optional[str] = None, db: Sessio
 
 @app.get("/api/session/active")
 def get_active_session(uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
-    sess = db.query(UserSession).filter_by(user_uid=uid).order_by(UserSession.created_at.desc()).first()
+    sess = db.query(UserSession).filter_by(user_uid=uid, is_ended=False).order_by(UserSession.created_at.desc()).first()
     if not sess:
         return {"session_id": None}
     return {"session_id": sess.id}
@@ -1512,7 +1512,8 @@ def start_sess(
     today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     existing_today = db.query(UserSession).filter(
         UserSession.user_uid == uid,
-        UserSession.created_at >= today_start
+        UserSession.created_at >= today_start,
+        UserSession.is_ended == False
     ).order_by(UserSession.created_at.desc()).first()
     
     if existing_today:
@@ -2214,6 +2215,26 @@ def update_duration(data: DurationUpdate, uid: str = Depends(get_current_uid), d
     sess.duration_seconds = data.duration_seconds
     db.commit()
     return {"duration_seconds": sess.duration_seconds}
+
+@app.post("/api/session/end/{session_id}")
+def end_session_endpoint(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
+    sess = db.query(UserSession).filter_by(id=session_id, user_uid=uid).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+    sess.is_ended = True
+    db.commit()
+    logger.info(f"Session {session_id} marked as ended for user {uid}")
+    return {"status": "success", "session_id": session_id}
+
+@app.post("/api/session/end-all-active")
+def end_all_active_sessions(uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
+    active_sessions = db.query(UserSession).filter_by(user_uid=uid, is_ended=False).all()
+    count = len(active_sessions)
+    for sess in active_sessions:
+        sess.is_ended = True
+    db.commit()
+    logger.info(f"Marked {count} active sessions as ended for user {uid}")
+    return {"status": "success", "ended_count": count}
 
 @app.delete("/api/session/{session_id}")
 def delete_session(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):

@@ -32,6 +32,9 @@ load_dotenv()
 # --- CONFIG ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
+RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
+ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME")
 
 if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY missing in .env")
@@ -39,34 +42,59 @@ if not ENCRYPTION_KEY:
 cipher = Fernet(ENCRYPTION_KEY.encode())
 
 client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+engine_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url=THERAPY_ENGINE_BASE_URL)
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"
 
-def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format=None, force_fallback=False, default_model=None, max_tokens=None, frequency_penalty=0.0, presence_penalty=0.0):
-    model_to_use = default_model if default_model else (GROQ_FALLBACK_MODEL if force_fallback else GROQ_MODEL)
+def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format=None, force_fallback=False, default_model=None, max_tokens=None, frequency_penalty=0.0, presence_penalty=0.0, client_type: str = "groq"):
+    model_to_use = ENGINE_MODEL_NAME if client_type == "engine" else (default_model if default_model else (GROQ_FALLBACK_MODEL if force_fallback else GROQ_MODEL))
+    selected_client = engine_client if client_type == "engine" else client
     try:
         kwargs = {
             "model": model_to_use,
             "messages": messages,
             "temperature": temperature,
             "top_p": top_p,
-            "frequency_penalty": frequency_penalty,
-            "presence_penalty": presence_penalty
         }
-        if response_format:
-            kwargs["response_format"] = response_format
+        if client_type != "engine":
+            kwargs["frequency_penalty"] = frequency_penalty
+            kwargs["presence_penalty"] = presence_penalty
+            if response_format:
+                kwargs["response_format"] = response_format
         if max_tokens:
             kwargs["max_tokens"] = max_tokens
             
-        res = client.chat.completions.create(**kwargs)
+        request_timeout = 300.0 if client_type == "engine" else None
+        res = selected_client.chat.completions.create(**kwargs, timeout=request_timeout)
         return res
     except Exception as e:
+        print(f"Completion failed for client_type={client_type}: {e}")
+        # If the fine-tuned engine on RunPod failed or timed out, fall back to Groq
+        if client_type == "engine":
+            print("Falling back to Groq primary client...")
+            try:
+                kwargs["model"] = GROQ_MODEL
+                kwargs["frequency_penalty"] = frequency_penalty
+                kwargs["presence_penalty"] = presence_penalty
+                if response_format:
+                    kwargs["response_format"] = response_format
+                res = client.chat.completions.create(**kwargs, timeout=30.0)
+                return res
+            except Exception as fallback_e:
+                print(f"Fallback to Groq also failed: {fallback_e}")
+                raise fallback_e
+
         # Check for rate limit error (429 or "rate limit")
         if not force_fallback and model_to_use == GROQ_MODEL and ("rate limit" in str(e).lower() or "429" in str(e).lower()):
             print(f"Rate limit hit for primary model {GROQ_MODEL}. Retrying with fallback model {GROQ_FALLBACK_MODEL}...")
             try:
                 kwargs["model"] = GROQ_FALLBACK_MODEL
-                res = client.chat.completions.create(**kwargs)
+                if client_type != "engine":
+                    kwargs["frequency_penalty"] = frequency_penalty
+                    kwargs["presence_penalty"] = presence_penalty
+                    if response_format:
+                        kwargs["response_format"] = response_format
+                res = selected_client.chat.completions.create(**kwargs)
                 return res
             except Exception as fallback_e:
                 print(f"Fallback model also failed: {fallback_e}")
@@ -1179,11 +1207,12 @@ def start_sess(
     db.add(new_sess)
     db.commit()
     db.refresh(new_sess)
+    session_id_val = new_sess.id
     
     user_msg_id = None
     # Save the user's initial description in the database as the first message if provided
     if data.description and data.description.strip():
-        user_msg = Message(session_id=new_sess.id, role="user", content=encrypt(data.description.strip()))
+        user_msg = Message(session_id=session_id_val, role="user", content=encrypt(data.description.strip()))
         db.add(user_msg)
         db.commit()
         db.refresh(user_msg)
@@ -1194,7 +1223,7 @@ def start_sess(
     if backend_crisis_scan(initial_desc) or data.mood.lower() in ["crisis", "suicidal"]:
         # Log crisis event
         crisis_event = CrisisEvent(
-            session_id=new_sess.id,
+            session_id=session_id_val,
             user_uid=uid,
             urgency_score=10,
             crisis_details=f"Initial Session description/mood: {initial_desc or data.mood}",
@@ -1204,10 +1233,10 @@ def start_sess(
         db.commit()
         
         # Save safety reply
-        ai_msg = Message(session_id=new_sess.id, role="assistant", content=encrypt(CRISIS_RESPONSE))
+        ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(CRISIS_RESPONSE))
         db.add(ai_msg)
         db.commit()
-        return {"session_id": new_sess.id, "first_message": CRISIS_RESPONSE}
+        return {"session_id": session_id_val, "first_message": CRISIS_RESPONSE}
 
     name = user.name if (user and user.name) else "Friend"
     
@@ -1250,7 +1279,8 @@ def start_sess(
             top_p=0.95,
             response_format={"type": "json_object"},
             frequency_penalty=0.6,
-            presence_penalty=0.6
+            presence_penalty=0.6,
+            client_type="engine"
         )
         raw_reply = res.choices[0].message.content or ""
         parsed_data = parse_llm_response(raw_reply)
@@ -1262,7 +1292,7 @@ def start_sess(
         if risk_info.get("suicide_risk") is True or risk_info.get("self_harm") is True or risk_info.get("crisis") is True:
             # Overwrite response with safety guidelines and record crisis event
             crisis_event = CrisisEvent(
-                session_id=new_sess.id,
+                session_id=session_id_val,
                 user_uid=uid,
                 trigger_message_id=user_msg_id,
                 urgency_score=urgency,
@@ -1273,7 +1303,7 @@ def start_sess(
             ai_msg_text = CRISIS_RESPONSE
         elif risk_info.get("violence") is True or risk_info.get("abuse") is True or risk_info.get("domestic_violence") is True:
             crisis_event = CrisisEvent(
-                session_id=new_sess.id,
+                session_id=session_id_val,
                 user_uid=uid,
                 trigger_message_id=user_msg_id,
                 urgency_score=urgency,
@@ -1286,30 +1316,31 @@ def start_sess(
             ai_msg_text = parsed_data.get("therapeutic_response", "I'm here for you. How can we start today?")
         
         # Save AI reply
-        ai_msg = Message(session_id=new_sess.id, role="assistant", content=encrypt(ai_msg_text))
+        ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(ai_msg_text))
         db.add(ai_msg)
         db.commit()
         
         # Save MessageAnalysis & trigger pipeline updates if user message was logged
         if user_msg_id is not None:
             save_message_analysis(db, user_msg_id, parsed_data)
-            process_therapeutic_pipeline(db, new_sess.id, uid, user_msg_id, parsed_data)
+            process_therapeutic_pipeline(db, session_id_val, uid, user_msg_id, parsed_data)
             # Enqueue background task to update the session summary
-            background_tasks.add_task(update_session_summary_task, new_sess.id, uid)
+            background_tasks.add_task(update_session_summary_task, session_id_val, uid)
             
-        return {"session_id": new_sess.id, "first_message": ai_msg_text}
+        return {"session_id": session_id_val, "first_message": ai_msg_text}
     except Exception as e:
         print(f"Groq Error: {e}")
+        db.rollback()
         # Save fallback AI reply acknowledging the mood
         mood_str = data.mood.strip().lower()
         if mood_str and mood_str != "neutral":
             ai_msg_text = f"I'm here for you. I see you marked that you're feeling {mood_str} today. What is on your mind?"
         else:
             ai_msg_text = "I'm here for you. How can we start today?"
-        ai_msg = Message(session_id=new_sess.id, role="assistant", content=encrypt(ai_msg_text))
+        ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(ai_msg_text))
         db.add(ai_msg)
         db.commit()
-        return {"session_id": new_sess.id, "first_message": ai_msg_text}
+        return {"session_id": session_id_val, "first_message": ai_msg_text}
 
 @app.post("/api/chat")
 def chat_node(
@@ -1427,7 +1458,8 @@ def chat_node(
             top_p=0.95,
             response_format={"type": "json_object"},
             frequency_penalty=0.6,
-            presence_penalty=0.6
+            presence_penalty=0.6,
+            client_type="engine"
         )
         raw_reply = res.choices[0].message.content or ""
         parsed_data = parse_llm_response(raw_reply)
@@ -1673,7 +1705,8 @@ async def chat_voice(
             top_p=0.95,
             response_format={"type": "json_object"},
             frequency_penalty=0.6,
-            presence_penalty=0.6
+            presence_penalty=0.6,
+            client_type="engine"
         )
         raw_reply = res.choices[0].message.content or ""
         parsed_data = parse_llm_response(raw_reply)

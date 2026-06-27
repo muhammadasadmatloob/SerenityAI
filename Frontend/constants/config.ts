@@ -72,7 +72,7 @@ const getDevServerIp = (): string | null => {
 const devIp = getDevServerIp();
 
 // Initial URL setup (fallback defaults)
-let initialUrl = "http://192.168.0.33:8000";
+let initialUrl = "http://192.168.0.41:8000";
 if (Platform.OS === 'android' && !devIp) {
   initialUrl = "http://10.0.2.2:8000"; // Android Emulator loopback
 } else if (Platform.OS === 'ios' && !devIp) {

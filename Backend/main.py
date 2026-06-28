@@ -348,7 +348,8 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
         with open(temp_path, "rb") as audio_file:
             translation = client.audio.transcriptions.create(
                 file=audio_file,
-                model="whisper-large-v3"
+                model="whisper-large-v3",
+                prompt=WHISPER_TRANSCRIPTION_PROMPT
             )
         
         try:
@@ -360,6 +361,44 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
     except Exception as e:
         logger.error(f"Transcription Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+WHISPER_TRANSCRIPTION_PROMPT = (
+    "This is a spoken input from a user in a therapy app. The user may speak in English, Urdu (اردو), "
+    "or code-switch between them. Transcribe the words exactly as they are spoken, preserving the language "
+    "and script of the speech (e.g., Urdu text must be written in the Urdu script like 'میں ٹھیک ہوں' rather "
+    "than Roman Urdu, and English in English). Do not translate."
+)
+
+def get_edge_tts_voice(text: str, response_lang: Optional[str] = None) -> str:
+    """Determine the best Edge TTS voice based on response language or text content."""
+    lang = (response_lang or "").strip().lower()
+    
+    # Check if the text contains characters in the Arabic block (covering Urdu, Arabic, Persian, etc.)
+    has_arabic = any(
+        '\u0600' <= c <= '\u06FF' or 
+        '\u0750' <= c <= '\u077F' or 
+        '\u08A0' <= c <= '\u08FF' or 
+        '\uFB50' <= c <= '\uFDFF' or 
+        '\uFE70' <= c <= '\uFEFF' 
+        for c in text
+    )
+    
+    if lang == "ur" or has_arabic:
+        return "ur-PK-UzmaNeural"
+        
+    # Standard mapping for common languages
+    lang_mapping = {
+        "es": "es-ES-ElviraNeural",
+        "fr": "fr-FR-DeniseNeural",
+        "de": "de-DE-AmalaNeural",
+        "ar": "ar-AE-FatimaNeural",
+        "hi": "hi-IN-SwaraNeural",
+        "zh": "zh-CN-XiaoxiaoNeural",
+        "it": "it-IT-ElsaNeural",
+        "pt": "pt-PT-RaquelNeural",
+    }
+    
+    return lang_mapping.get(lang, "en-US-AvaNeural")
 
 def get_tts_parameters(parsed_data: dict) -> tuple:
     # Default parameters
@@ -439,7 +478,8 @@ async def text_to_speech(text: str, session_id: Optional[str] = None, db: Sessio
     last_err = None
     for attempt in range(max_attempts):
         try:
-            communicate = edge_tts.Communicate(text, "en-US-AvaNeural", rate=rate_adjust, pitch=pitch_adjust)
+            voice = get_edge_tts_voice(text)
+            communicate = edge_tts.Communicate(text, voice, rate=rate_adjust, pitch=pitch_adjust)
             chunks = []
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
@@ -569,7 +609,8 @@ def parse_llm_response(raw_response: str) -> dict:
                 "urgency_score": 1
             },
             "therapy_strategy": "Compassionate general counseling",
-            "therapeutic_response": "I'm taking a moment to process what you've shared. Please, continue."
+            "therapeutic_response": "I'm taking a moment to process what you've shared. Please, continue.",
+            "response_language": "en"
         }
     
     # Stamp schema version on every parsed payload for downstream validation
@@ -1161,7 +1202,8 @@ def get_system_prompt_v2(
         "- Speak in short, real sentences. Use commas and ellipses where a human would pause.\n"
         "- Vary how you open every reply. Some replies should be just one or two sentences — not every turn needs a paragraph.\n"
         "- Never summarize what the person just said back to them word-for-word.\n"
-        "- Never end with \"How does that sound?\" or \"Does that make sense?\". End with a real question, observation, or presence.\n\n"
+        "- Never end with \"How does that sound?\" or \"Does that make sense?\". End with a real question, observation, or presence.\n"
+        "- **LANGUAGE ALIGNMENT**: You must respond in the same language that the client used in their latest message. If they spoke/wrote in Urdu, reply in Urdu using the Urdu script (اردو). If they spoke/wrote in English, reply in English. Maintain perfect bilingual/multilingual capability.\n\n"
         
         "ABOUT LENGTH\n"
         "Match length to what the moment needs (e.g. two grounding sentences for acute distress; longer for complex exploration). Read the room.\n\n"
@@ -1288,6 +1330,7 @@ def get_system_prompt_v2(
         "    \"energy_score\": [1-10 intensity],\n"
         "    \"confidence_score\": [1-10 intensity]\n"
         "  },\n"
+        "  \"response_language\": \"[ISO 639-1 code of the language you used for the therapeutic_response, e.g. 'en', 'ur', 'es']\",\n"
         "  \"therapeutic_response\": \"[Your direct response to the user. Follow all response style guidelines. If urgency_score is 8-10 (Crisis Mode), focus entirely on grounding and emergency resources.]\"\n"
         "}\n\n"
         "Ensure your JSON is valid and conforms strictly to this structure. Do not output any thinking or markdown block prefixes, only raw JSON."
@@ -1863,7 +1906,8 @@ async def chat_voice(
         with open(temp_path, "rb") as audio_file:
             translation = client.audio.transcriptions.create(
                 file=audio_file,
-                model="whisper-large-v3"
+                model="whisper-large-v3",
+                prompt=WHISPER_TRANSCRIPTION_PROMPT
             )
         user_text = translation.text or ""
         
@@ -2089,7 +2133,9 @@ async def chat_voice(
         for attempt in range(max_attempts):
             try:
                 rate_adjust, pitch_adjust = get_tts_parameters(parsed_data)
-                communicate = edge_tts.Communicate(ai_reply, "en-US-AvaNeural", rate=rate_adjust, pitch=pitch_adjust)
+                response_lang = parsed_data.get("response_language", "en")
+                voice = get_edge_tts_voice(ai_reply, response_lang)
+                communicate = edge_tts.Communicate(ai_reply, voice, rate=rate_adjust, pitch=pitch_adjust)
                 await communicate.save(ai_audio_path)
                 tts_success = True
                 break

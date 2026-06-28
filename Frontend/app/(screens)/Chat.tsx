@@ -21,11 +21,13 @@ interface Message {
   text: string;
   sender: "user" | "ai";
   audio_url?: string | null;
+  shouldAutoplay?: boolean;
 }
 
 interface VoiceMessagePlayerProps {
   audioUrl: string;
   sender: "user" | "ai";
+  shouldAutoplay?: boolean;
 }
 
 const WAVEFORM_HEIGHTS = [
@@ -59,13 +61,14 @@ const clearRecordingOptions = {
   },
 };
 
-const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sender }) => {
+const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sender, shouldAutoplay }) => {
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [progressBarWidth, setProgressBarWidth] = useState(0);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const autoplayedRef = useRef(false);
 
   const onPlaybackStatusUpdate = (status: any) => {
     if (status.isLoaded) {
@@ -75,6 +78,11 @@ const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sende
       if (status.didJustFinish) {
         setIsPlaying(false);
         setPosition(0);
+        if (soundRef.current) {
+          soundRef.current.unloadAsync().catch(() => {});
+          setSound(null);
+          soundRef.current = null;
+        }
       }
     }
   };
@@ -121,12 +129,22 @@ const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sende
   };
 
   useEffect(() => {
+    if (shouldAutoplay && !autoplayedRef.current) {
+      autoplayedRef.current = true;
+      const timer = setTimeout(() => {
+        handlePlayPause();
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldAutoplay]);
+
+  useEffect(() => {
     return () => {
-      if (sound) {
-        sound.unloadAsync().catch(() => {});
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
       }
     };
-  }, [sound]);
+  }, []);
 
   const formatTime = (millis: number) => {
     const totalSeconds = millis / 1000;
@@ -1122,7 +1140,7 @@ export default function ChatScreen() {
           });
           return [
             ...updated,
-            { id: data.ai_message.id, text: data.ai_message.text, sender: "ai", audio_url: data.ai_message.audio_url }
+            { id: data.ai_message.id, text: data.ai_message.text, sender: "ai", audio_url: data.ai_message.audio_url, shouldAutoplay: true }
           ];
         });
 
@@ -1215,7 +1233,7 @@ export default function ChatScreen() {
               >
                 {msg.audio_url ? (
                   <View>
-                    <VoiceMessagePlayer audioUrl={msg.audio_url} sender={msg.sender} />
+                    <VoiceMessagePlayer audioUrl={msg.audio_url} sender={msg.sender} shouldAutoplay={msg.shouldAutoplay} />
                     {msg.text && msg.text !== "Voice Message" && (
                       <Text className={`text-[13px] leading-5 mt-2 pt-2 border-t font-semibold ${
                         msg.sender === "user" ? "text-white/95 border-white/20" : "text-slate-800/80 border-black/10"

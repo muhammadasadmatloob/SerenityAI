@@ -38,6 +38,7 @@ from database import (
 )
 from voice_analyzer import analyze_voice_emotion
 from semantic_memory import add_semantic_memory, retrieve_semantic_memories
+from ai_router import AIRouter
 
 load_dotenv()
 
@@ -200,120 +201,57 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
     # Store the messages in context for debugging on error
     llm_payload_context.set(messages)
     
-    model_to_use = ENGINE_MODEL_NAME if client_type == "engine" else (default_model if default_model else (GROQ_FALLBACK_MODEL if force_fallback else GROQ_MODEL))
-    selected_client = engine_client if client_type == "engine" else client
-    
-    kwargs = {
-        "model": model_to_use,
-        "messages": messages,
-        "temperature": temperature,
-        "top_p": top_p,
-    }
-    if client_type != "engine":
-        kwargs["frequency_penalty"] = frequency_penalty
-        kwargs["presence_penalty"] = presence_penalty
-        if response_format:
-            kwargs["response_format"] = response_format
-    if max_tokens:
-        kwargs["max_tokens"] = max_tokens
-
-    def fallback_to_groq():
-        logger.info("Falling back to Groq primary client with rate limit rotation...")
-        fallback_kwargs = kwargs.copy()
-        fallback_kwargs["frequency_penalty"] = frequency_penalty
-        fallback_kwargs["presence_penalty"] = presence_penalty
-        if response_format:
-            fallback_kwargs["response_format"] = response_format
-
-        # 1. Try primary Groq model first
-        try:
-            fallback_kwargs["model"] = GROQ_MODEL
-            res = client.chat.completions.create(**fallback_kwargs, timeout=45.0)
-            return res
-        except Exception as primary_e:
-            logger.error(f"Primary Groq model failed: {primary_e}")
-            if "rate limit" in str(primary_e).lower() or "429" in str(primary_e).lower() or "limit exceeded" in str(primary_e).lower():
-                # 2. Cycle through fallback models
-                for fallback_model in GROQ_FALLBACK_MODELS:
-                    logger.info(f"Retrying Groq fallback: {fallback_model}...")
-                    try:
-                        fallback_kwargs["model"] = fallback_model
-                        res = client.chat.completions.create(**fallback_kwargs, timeout=45.0)
-                        return res
-                    except Exception as fallback_e:
-                        logger.error(f"Fallback to {fallback_model} failed: {fallback_e}")
-            raise primary_e
-
+    # Map client_type & default_model to task_type for priority routing
+    # Requirement 9: Lightweight models are prioritized for summaries, memory extraction, suggestions, and title generation (default "analysis" task)
     if client_type == "engine":
-        global engine_consecutive_failures, engine_circuit_broken, engine_circuit_broken_until
-        
-        with _circuit_breaker_lock:
-            if engine_circuit_broken:
-                if time.time() < engine_circuit_broken_until:
-                    logger.warning(f"Circuit Breaker: RunPod engine is currently disabled (cooldown active). Skipping engine call. Cooldown remaining: {int(engine_circuit_broken_until - time.time())}s")
-                    return fallback_to_groq()
-                else:
-                    logger.info("Circuit Breaker: Cooldown expired. Transitioning to half-open, testing connection...")
-                    engine_circuit_broken = False
+        task_type = "complex_reasoning"
+    elif client_type == "groq" and default_model == "llama-3.3-70b-versatile":
+        task_type = "complex_reasoning"
+    else:
+        task_type = "chat" if client_type == "engine" else "analysis"
 
-        # RunPod timeouts increased (e.g., 50s first, 70s second) to prevent timing out during container cold starts
-        max_attempts = 3
-        backoff_factor = 2.0
-        delay = 3.0
-        for attempt in range(1, max_attempts + 1):
-            try:
-                logger.info(f"Connecting to RunPod engine... Attempt {attempt}/{max_attempts}")
-                attempt_timeout = 40.0 + (attempt * 20.0)
-                res = selected_client.chat.completions.create(**kwargs, timeout=attempt_timeout)
-                
-                # Reset circuit breaker on success
-                with _circuit_breaker_lock:
-                    if engine_consecutive_failures > 0 or engine_circuit_broken:
-                        logger.info("Circuit Breaker: Connection succeeded. Resetting failure counter.")
-                    engine_consecutive_failures = 0
-                    engine_circuit_broken = False
-                    engine_circuit_broken_until = 0.0
-                return res
-            except (openai.APITimeoutError, openai.APIConnectionError) as e:
-                if attempt == max_attempts:
-                    logger.error(f"RunPod engine failed after {max_attempts} attempts: {e}")
-                    break
-                logger.warning(f"RunPod engine connection timed out/failed (attempt {attempt}). Retrying in {delay}s...")
-                time.sleep(delay)
-                delay *= backoff_factor
-            except Exception as e:
-                logger.error(f"RunPod engine encountered an error: {e}")
-                break
-        
-        # Trip the circuit breaker on failure
-        with _circuit_breaker_lock:
-            engine_consecutive_failures += 1
-            logger.warning(f"Circuit Breaker: RunPod engine failure count = {engine_consecutive_failures}/3")
-            if engine_consecutive_failures >= 3:
-                engine_circuit_broken = True
-                engine_circuit_broken_until = time.time() + 120.0 # Keep circuit broken for 2 minutes to let Pod fully spin up
-                logger.error("Circuit Breaker: RunPod engine failed 3 consecutive times. Tripping circuit! Cooldown active for 120s.")
-                
-        return fallback_to_groq()
-            
-    try:
-        res = selected_client.chat.completions.create(**kwargs)
-        return res
-    except Exception as e:
-        logger.error(f"Completion failed for client_type={client_type}: {e}")
-        # Check for rate limit error (429 or "rate limit" or "limit exceeded")
-        if client_type != "engine" and ("rate limit" in str(e).lower() or "429" in str(e).lower() or "limit exceeded" in str(e).lower()):
-            for fallback_model in GROQ_FALLBACK_MODELS:
-                logger.warning(f"Rate limit hit. Retrying with fallback model {fallback_model}...")
-                try:
-                    kwargs["model"] = fallback_model
-                    res = selected_client.chat.completions.create(**kwargs)
-                    return res
-                except Exception as fallback_e:
-                    logger.error(f"Fallback model {fallback_model} also failed: {fallback_e}")
-            raise e
-        else:
-            raise e
+    # Call the centralized AI Router
+    response = AIRouter.complete(
+        messages=messages,
+        task_type=task_type,
+        temperature=temperature,
+        top_p=top_p,
+        response_format=response_format,
+        max_tokens=max_tokens,
+        frequency_penalty=frequency_penalty,
+        presence_penalty=presence_penalty
+    )
+
+    # Wrap the standardized AIResponse back to the structure main.py expects
+    class MockChoiceMessage:
+        def __init__(self, content):
+            self._content = content
+
+        @property
+        def content(self):
+            return self._content
+
+        @content.setter
+        def content(self, val):
+            self._content = val
+
+    class MockChoice:
+        def __init__(self, content):
+            self.message = MockChoiceMessage(content)
+
+    class MockCompletion:
+        def __init__(self, content, usage=None):
+            self.choices = [MockChoice(content)]
+            self.usage = usage
+
+    class MockUsage:
+        def __init__(self, prompt_tokens, completion_tokens, total_tokens):
+            self.prompt_tokens = prompt_tokens
+            self.completion_tokens = completion_tokens
+            self.total_tokens = total_tokens
+
+    usage = MockUsage(response.prompt_tokens, response.completion_tokens, response.total_tokens)
+    return MockCompletion(response.content, usage)
 
 if not firebase_admin._apps:
     firebase_json = os.getenv("FIREBASE_JSON_CONTENT")

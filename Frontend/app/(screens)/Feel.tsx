@@ -21,7 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
 import { Audio } from "expo-av";
 import { auth } from "../../firebase/firebase";
-import { BACKEND_URL } from "../../constants/config";
+import { BACKEND_URL, checkInternetConnection } from "../../constants/config";
 
 const clearRecordingOptions = {
   android: {
@@ -78,18 +78,26 @@ export default function FeelScreen() {
           const res = await fetch(`${BACKEND_URL}/api/profile/stats`, {
             headers: { Authorization: `Bearer ${token}` }
           });
-          if (res.ok) {
-            const json = await res.json();
-            if (json.path) {
-              setUserPath(json.path);
+            if (res.ok) {
+              const json = await res.json();
+              if (json.path) {
+                setUserPath(json.path);
+              }
             }
+          } catch (e) {
+            console.log("Error checking user path:", e);
           }
-        } catch (e) {
-          console.log("Error checking user path:", e);
+
+          // Trigger background warm-up ping for RunPod model to reduce cold start latency
+          try {
+            fetch(`${BACKEND_URL}/api/session/warmup`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` }
+            }).catch((err) => console.log("⚠️ Feel: RunPod warm-up silent fail:", err));
+          } catch (err) {}
         }
-      }
-    });
-    return unsubscribe;
+      });
+      return unsubscribe;
   }, []);
 
   const startRecording = async () => {
@@ -194,6 +202,16 @@ export default function FeelScreen() {
 
   const handleContinue = async () => {
     if (!canProceed) return;
+    
+    // Verify network connectivity before attempting the initial session handshake
+    const isOnline = await checkInternetConnection();
+    if (!isOnline) {
+      Alert.alert(
+        "No Internet Connection",
+        "SerenityAI requires an active internet connection to start your session. Please check your cellular data or Wi-Fi settings."
+      );
+      return;
+    }
     
     if (userPath) {
       setIsStartingSession(true);

@@ -151,10 +151,34 @@ const runAutoDiscovery = async () => {
   }
 };
 
+export const checkInternetConnection = async (): Promise<boolean> => {
+  try {
+    const state = await Network.getNetworkStateAsync();
+    return !!(state.isConnected && state.isInternetReachable);
+  } catch (e) {
+    console.log("⚠️ config: Error checking internet connection:", e);
+    return false;
+  }
+};
+
 // Heartbeat function to verify if BACKEND_URL is still online
-// If offline, it triggers a subnet sweep.
+// If offline, it triggers a subnet sweep in development mode.
 export const verifyAndDiscover = async () => {
   console.log("🔍 config: Checking backend status at current BACKEND_URL:", BACKEND_URL);
+  
+  // Disable autodiscovery and developer IP checks completely in Production builds
+  if (!__DEV__) {
+    console.log("🚀 config: Running in PRODUCTION mode. Locking URL to secure production endpoint:", PRODUCTION_URL);
+    setBackendUrl(PRODUCTION_URL);
+    if (!isDiscoveryDone) {
+      isDiscoveryDone = true;
+      if (discoveryPromiseResolve) {
+        discoveryPromiseResolve();
+      }
+    }
+    return;
+  }
+
   const checkTimeout = BACKEND_URL === PRODUCTION_URL ? 10000 : 2000;
   const isOnline = await checkBackendOnline(BACKEND_URL, checkTimeout);
 

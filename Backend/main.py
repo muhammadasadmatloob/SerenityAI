@@ -1986,6 +1986,29 @@ def start_sess(
         db.commit()
         return {"session_id": session_id_val, "first_message": ai_msg_text}
 
+@app.post("/api/session/warmup")
+def warmup_runpod_engine(uid: str = Depends(get_current_uid)):
+    """Pings the RunPod engine to warm it up before the session starts."""
+    try:
+        logger.info(f"User {uid} triggered session warm-up. Warming up RunPod engine...")
+        # Send a tiny ping completion to get it out of sleep mode
+        with _circuit_breaker_lock:
+            circuit_broken = engine_circuit_broken and time.time() < engine_circuit_broken_until
+            
+        if not circuit_broken:
+            safe_groq_completion(
+                messages=[{"role": "user", "content": "ping"}],
+                temperature=0.1,
+                top_p=0.9,
+                client_type="engine"
+            )
+            return {"status": "success", "message": "Engine is warm"}
+        else:
+            return {"status": "fallback", "message": "Engine circuit is broken, using fallback"}
+    except Exception as e:
+        logger.warning(f"Engine warm-up ping failed: {e}")
+        return {"status": "failed", "message": str(e)}
+
 @app.post("/api/chat")
 def chat_node(
     data: ChatMsg, 

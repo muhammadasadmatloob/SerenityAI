@@ -2,6 +2,17 @@
 
 SerenityAI is a comprehensive mental wellness and therapeutic support application featuring a dynamic React Native Frontend (built with Expo) and a FastAPI Backend powered by AI capabilities.
 
+## 📱 Download the Android APK
+
+You can download the compiled production-ready Android APK directly from this repository:
+
+👉 **[Download SerenityAI.apk](https://github.com/muhammadasadmatloob/SerenityAI/raw/main/APK/SerenityAI.apk)**
+
+### Installation Instructions:
+1. Click the download link above on your Android device (or download it on your PC and transfer it to your phone).
+2. Tap the downloaded file to begin the installation.
+3. If prompted by **Play Protect** that the application is from an "Unknown developer", tap **More details** and select **Install anyway** (since it is a self-signed package).
+
 ## Project Structure
 
 The project is split into two main components:

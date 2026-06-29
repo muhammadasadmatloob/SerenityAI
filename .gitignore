@@ -6,6 +6,8 @@
 !*.env.example
 !**/.env.example
 serviceAccountKey.json
+*.keystore
+*.jks
 
 
 # Backend exclusions

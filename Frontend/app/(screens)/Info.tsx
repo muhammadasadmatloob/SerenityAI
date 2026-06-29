@@ -1,7 +1,7 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
 import { Stack, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,18 +13,16 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Keyboard
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
-
-// Import your automated network config
 import { BACKEND_URL } from "../../constants/config"; 
-
-// ✅ IMPORT FIX: Pull in saveUserInfo to unblock the layout guard
 import { saveUserInfo } from "../../firebase/firebaseConfig";
 
 export default function InfoScreen() {
   const router = useRouter();
+  const scrollRef = useRef<ScrollView>(null);
 
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState(new Date(2000, 0, 1));
@@ -38,6 +36,13 @@ export default function InfoScreen() {
   const [ePhone, setEPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
+
+  // Auto-scroll to inputs on focus
+  const handleInputFocus = (yOffset: number) => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: yOffset - 40, animated: true });
+    }, 300);
+  };
 
   const handleGetLocation = async () => {
     setLocating(true);
@@ -60,7 +65,6 @@ export default function InfoScreen() {
         longitude: lng,
       });
 
-      // Reverse geocode to get the exact address
       const geocode = await Location.reverseGeocodeAsync({
         latitude: lat,
         longitude: lng,
@@ -69,12 +73,12 @@ export default function InfoScreen() {
       if (geocode && geocode.length > 0) {
         const addr = geocode[0];
         const parts = [
-          addr.name,       // house/building name
-          addr.street,     // street
-          addr.district,   // subregion
-          addr.city,       // city
-          addr.region,     // state
-          addr.country,    // country
+          addr.name,
+          addr.street,
+          addr.district,
+          addr.city,
+          addr.region,
+          addr.country,
         ].filter(Boolean);
         const fullAddr = parts.join(", ");
         setAddress(fullAddr || `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`);
@@ -91,7 +95,7 @@ export default function InfoScreen() {
 
   const handleContinue = async () => {
     if (!name || !eName || !ePhone || !location) {
-      Alert.alert("Almost there!", "Please fill in all details.");
+      Alert.alert("Almost there!", "All fields are required. Please enter your name, date of birth, sync location, and emergency contact details.");
       return;
     }
 
@@ -111,7 +115,6 @@ export default function InfoScreen() {
       setLoading(true);
       const token = await user.getIdToken();
 
-      // Step 1: Write profile details to your Python Backend + Neon SQL
       const response = await fetch(`${BACKEND_URL}/api/info`, {
         method: "POST",
         headers: {
@@ -131,9 +134,6 @@ export default function InfoScreen() {
       const result = await response.json();
 
       if (response.ok) {
-        // ✅ STEP 2: Dual Write synchronization to Firestore.
-        // This instantly triggers the onSnapshot listener inside _layout.tsx,
-        // setting isProfileComplete to true and clean-routing you to the Feel screen.
         await saveUserInfo(
           user.uid,
           name,
@@ -141,8 +141,6 @@ export default function InfoScreen() {
           { latitude: location.latitude, longitude: location.longitude },
           { name: eName, phone: ePhone }
         );
-
-        // The layout guard will safely handle transition routing now!
       } else {
         throw new Error(result.detail || "Server sync failed.");
       }
@@ -153,34 +151,56 @@ export default function InfoScreen() {
     }
   };
 
+  let nameY = 0;
+  let emergencyY = 0;
+
   return (
     <SafeAreaView className="flex-1 bg-[#FBFBFF]">
       <Stack.Screen options={{ gestureEnabled: false, headerShown: false }} />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
-        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          <View className="px-8 pt-12 pb-10">
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"} 
+        className="flex-1"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView 
+          ref={scrollRef}
+          contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: 250 }} 
+          showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
+        >
+          <View className="pt-12 pb-10">
             <View className="mb-10 items-center">
               <Text className="text-4xl font-light text-[#1A1C1E] tracking-tight">
                 Hello, <Text className="font-bold text-[#808CEA]">Friend</Text>
               </Text>
+              <Text className="text-gray-400 text-sm mt-2 text-center">Let's set up your profile to begin</Text>
             </View>
 
             <View className="space-y-4">
-              <TextInput
-                placeholder="How should I call you?"
-                className="bg-white px-6 py-5 rounded-3xl mb-4 text-lg border border-[#E2E8F0] text-gray-800"
-                value={name}
-                onChangeText={setName}
-              />
+              {/* Name Field */}
+              <Text className="font-bold text-gray-700 ml-1 mb-2">1. Your Full Name</Text>
+              <View onLayout={(e) => { nameY = e.nativeEvent.layout.y; }}>
+                <TextInput
+                  placeholder="Enter your name"
+                  placeholderTextColor="#9CA3AF"
+                  className="bg-white px-6 py-5 rounded-3xl mb-6 border border-[#E2E8F0] text-gray-800"
+                  value={name}
+                  onChangeText={setName}
+                  onFocus={() => handleInputFocus(nameY)}
+                  style={{ fontSize: 16, color: "#1F2937" }}
+                />
+              </View>
 
+              {/* DOB Field */}
+              <Text className="font-bold text-gray-700 ml-1 mb-2">2. Date of Birth</Text>
               <TouchableOpacity
                 onPress={() => setShowDatePicker(true)}
-                className="bg-white px-6 py-5 rounded-3xl mb-4 flex-row justify-between items-center border border-[#E2E8F0]"
+                className="bg-white px-6 py-5 rounded-3xl mb-6 flex-row justify-between items-center border border-[#E2E8F0]"
               >
                 <Text className="text-lg text-[#2D3748]">
                   {birthDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                 </Text>
-                <Text className="text-[#808CEA] font-medium">Date of Birth</Text>
+                <Text className="text-[#808CEA] font-medium">Select Date</Text>
               </TouchableOpacity>
 
               {showDatePicker && (
@@ -196,19 +216,21 @@ export default function InfoScreen() {
                 />
               )}
 
+              {/* Location Field */}
+              <Text className="font-bold text-gray-700 ml-1 mb-2">3. Current Location</Text>
               <TouchableOpacity
                 onPress={handleGetLocation}
                 disabled={locating}
-                className={`px-6 py-5 rounded-3xl mb-4 flex-row items-center justify-center border-2 border-dashed ${
+                className={`px-6 py-5 rounded-3xl mb-6 flex-row items-center justify-center border-2 border-dashed ${
                   location ? "bg-[#F0FFF4] border-[#68D391]" : "bg-[#EDF2F7] border-[#CBD5E0]"
                 }`}
               >
-                {locating ? <ActivityIndicator color="#808CEA" /> : <Text className="font-semibold text-gray-700">{location ? "✓ Location synced" : "📍 Enable Location"}</Text>}
+                {locating ? <ActivityIndicator color="#808CEA" /> : <Text className="font-semibold text-gray-700">{location ? "✓ Location synced" : "📍 Enable & Sync Location"}</Text>}
               </TouchableOpacity>
 
               {location && (
-                <View className="bg-white p-4 rounded-3xl border border-[#E2E8F0] mb-4 overflow-hidden items-center shadow-sm">
-                  <Text className="text-gray-500 text-xs font-bold uppercase mb-2 self-start">Location Details</Text>
+                <View className="bg-white p-4 rounded-3xl border border-[#E2E8F0] mb-6 overflow-hidden items-center shadow-sm">
+                  <Text className="text-gray-500 text-xs font-bold uppercase mb-2 self-start">Synced Address</Text>
                   <Image
                     source={{ uri: `https://static-maps.yandex.ru/1.x/?ll=${location.longitude},${location.latitude}&z=16&l=map&size=600,300&pt=${location.longitude},${location.latitude},pm2rdm` }}
                     style={{ width: "100%", height: 150, borderRadius: 16 }}
@@ -218,19 +240,30 @@ export default function InfoScreen() {
                 </View>
               )}
 
-              <View className="bg-white p-6 rounded-[40px] border border-[#E2E8F0]">
+              {/* Emergency Contact Field */}
+              <Text className="font-bold text-gray-700 ml-1 mb-2">4. Emergency Contact Details</Text>
+              <View 
+                className="bg-white p-6 rounded-[35px] border border-[#E2E8F0] mb-6"
+                onLayout={(e) => { emergencyY = e.nativeEvent.layout.y; }}
+              >
                 <TextInput
-                  placeholder="Emergency contact name"
+                  placeholder="Emergency contact person name"
+                  placeholderTextColor="#9CA3AF"
                   className="bg-[#F8FAFC] px-5 py-4 rounded-2xl mb-3 border border-[#EDF2F7] text-gray-800"
                   value={eName}
                   onChangeText={setEName}
+                  onFocus={() => handleInputFocus(emergencyY)}
+                  style={{ fontSize: 15, color: "#1F2937" }}
                 />
                 <TextInput
-                  placeholder="Their phone number"
+                  placeholder="Phone number (e.g. +923331234567)"
+                  placeholderTextColor="#9CA3AF"
                   className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800"
                   keyboardType="phone-pad"
                   value={ePhone}
                   onChangeText={setEPhone}
+                  onFocus={() => handleInputFocus(emergencyY + 80)}
+                  style={{ fontSize: 15, color: "#1F2937" }}
                 />
               </View>
             </View>
@@ -238,7 +271,7 @@ export default function InfoScreen() {
             <TouchableOpacity
               onPress={handleContinue}
               disabled={loading || locating}
-              className={`py-5 mt-10 rounded-full ${loading || locating ? "bg-[#CBD5E0]" : "bg-[#808CEA]"}`}
+              className={`py-5 mt-4 rounded-full ${loading || locating ? "bg-[#CBD5E0]" : "bg-[#808CEA]"}`}
             >
               {loading ? <ActivityIndicator color="white" /> : <Text className="text-white text-center text-xl font-semibold">Begin Journey</Text>}
             </TouchableOpacity>

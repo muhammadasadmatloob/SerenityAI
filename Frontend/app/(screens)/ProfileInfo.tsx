@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ChevronLeft, MapPin, Calendar, Mail, Fingerprint } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
+import { saveUserInfo } from "../../firebase/firebaseConfig";
 
 export default function ProfileInfoScreen() {
   const router = useRouter();
@@ -30,6 +31,17 @@ export default function ProfileInfoScreen() {
   useEffect(() => { loadData(); }, []);
 
   const handleSave = async () => {
+    if (!data.name || !data.eName || !data.ePhone) {
+        Alert.alert("Error", "Please fill in all details.");
+        return;
+    }
+
+    const phoneRegex = /^\+\d{1,4}\d{10}$/;
+    if (!phoneRegex.test(data.ePhone)) {
+        Alert.alert("Invalid Phone Number", "Phone number must start with + followed by the country code and exactly 10 digits (e.g., +923331234567).");
+        return;
+    }
+
     setUpdating(true);
     try {
         const token = await auth.currentUser?.getIdToken();
@@ -38,9 +50,28 @@ export default function ProfileInfoScreen() {
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ name: data.name, emergency_name: data.eName, emergency_phone: data.ePhone })
         });
-        if (res.ok) Alert.alert("Success", "Profile information updated.");
-    } catch { 
-        Alert.alert("Error", "Update failed."); 
+        
+        if (res.ok) {
+            // Dual write: sync to Firestore to ensure UI snapshot updates immediately
+            const uid = auth.currentUser?.uid;
+            if (uid) {
+                const birthDate = data.dob && data.dob !== "Not Set" ? new Date(data.dob) : new Date();
+                const location = (data.lat !== undefined && data.lng !== undefined && data.lat !== 0) ? { latitude: data.lat, longitude: data.lng } : null;
+                await saveUserInfo(
+                    uid,
+                    data.name,
+                    birthDate,
+                    location,
+                    { name: data.eName, phone: data.ePhone }
+                );
+            }
+            Alert.alert("Success", "Profile information updated.");
+        } else {
+            const errJson = await res.json();
+            throw new Error(errJson.detail || "Server update failed.");
+        }
+    } catch (err: any) { 
+        Alert.alert("Error", err.message || "Update failed."); 
     } finally { 
         setUpdating(false); 
     }
@@ -50,58 +81,60 @@ export default function ProfileInfoScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-white px-8">
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <TouchableOpacity onPress={() => router.back()} className="mb-6 mt-4">
-            <ChevronLeft size={30} color="black" />
-        </TouchableOpacity>
-        
-        <Text className="text-3xl font-bold mb-8 text-gray-800">Personal Details</Text>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
+        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <TouchableOpacity onPress={() => router.back()} className="mb-6 mt-4">
+              <ChevronLeft size={30} color="black" />
+          </TouchableOpacity>
+          
+          <Text className="text-3xl font-bold mb-8 text-gray-800">Personal Details</Text>
 
-        {/* --- READ ONLY SECTION --- */}
-        <View className="bg-white p-6 rounded-3xl mb-6 shadow-sm border border-gray-100">
-            <InfoRow icon={<Fingerprint size={18} color="#94A3B8"/>} label="User ID" value={data.uid} />
-            <InfoRow icon={<Mail size={18} color="#94A3B8"/>} label="Email Address" value={data.email} />
-            <InfoRow icon={<Calendar size={18} color="#94A3B8"/>} label="Birth Date" value={data.dob?.split('T')[0] || "Not Set"} />
-            <InfoRow 
-                icon={<MapPin size={18} color="#94A3B8"/>} 
-                label="Last Synced Location" 
-                value={data.lat ? `${data.lat.toFixed(2)}, ${data.lng.toFixed(2)}` : "Not available"} 
-            />
-        </View>
+          {/* --- READ ONLY SECTION --- */}
+          <View className="bg-white p-6 rounded-3xl mb-6 shadow-sm border border-gray-100">
+              <InfoRow icon={<Fingerprint size={18} color="#94A3B8"/>} label="User ID" value={data.uid} />
+              <InfoRow icon={<Mail size={18} color="#94A3B8"/>} label="Email Address" value={data.email} />
+              <InfoRow icon={<Calendar size={18} color="#94A3B8"/>} label="Birth Date" value={data.dob?.split('T')[0] || "Not Set"} />
+              <InfoRow 
+                  icon={<MapPin size={18} color="#94A3B8"/>} 
+                  label="Last Synced Location" 
+                  value={data.lat ? `${data.lat.toFixed(2)}, ${data.lng.toFixed(2)}` : "Not available"} 
+              />
+          </View>
 
-        {/* --- EDITABLE SECTION --- */}
-        <Text className="font-bold mb-2 text-gray-700 ml-1">Display Name</Text>
-        <TextInput 
-            value={data.name} 
-            onChangeText={(t) => setData({...data, name: t})} 
-            className="bg-white p-5 rounded-2xl mb-6 border border-gray-100 shadow-sm text-gray-800" 
-        />
+          {/* --- EDITABLE SECTION --- */}
+          <Text className="font-bold mb-2 text-gray-700 ml-1">Display Name</Text>
+          <TextInput 
+              value={data.name} 
+              onChangeText={(t) => setData({...data, name: t})} 
+              className="bg-white p-5 rounded-2xl mb-6 border border-gray-100 shadow-sm text-gray-800" 
+          />
 
-        <View className="bg-[#808CEA]/5 p-6 rounded-3xl mb-8 border border-[#808CEA]/10">
-            <Text className="font-bold mb-4 text-[#4A55A2]">Emergency Contact</Text>
-            <TextInput 
-                placeholder="Contact Person Name" 
-                value={data.eName} 
-                onChangeText={(t) => setData({...data, eName: t})} 
-                className="bg-white p-4 rounded-xl mb-3 border border-gray-100 text-gray-800" 
-            />
-            <TextInput 
-                placeholder="Emergency Phone" 
-                value={data.ePhone} 
-                onChangeText={(t) => setData({...data, ePhone: t})} 
-                keyboardType="phone-pad" 
-                className="bg-white p-4 rounded-xl border border-gray-100 text-gray-800" 
-            />
-        </View>
+          <View className="bg-[#808CEA]/5 p-6 rounded-3xl mb-8 border border-[#808CEA]/10">
+              <Text className="font-bold mb-4 text-[#4A55A2]">Emergency Contact</Text>
+              <TextInput 
+                  placeholder="Contact Person Name" 
+                  value={data.eName} 
+                  onChangeText={(t) => setData({...data, eName: t})} 
+                  className="bg-white p-4 rounded-xl mb-3 border border-gray-100 text-gray-800" 
+              />
+              <TextInput 
+                  placeholder="Emergency Phone" 
+                  value={data.ePhone} 
+                  onChangeText={(t) => setData({...data, ePhone: t})} 
+                  keyboardType="phone-pad" 
+                  className="bg-white p-4 rounded-xl border border-gray-100 text-gray-800" 
+              />
+          </View>
 
-        <TouchableOpacity 
-            onPress={handleSave} 
-            disabled={updating}
-            className="bg-[#808CEA] p-5 rounded-full items-center mb-10 shadow-lg shadow-[#808CEA]/30"
-        >
-            {updating ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Save Changes</Text>}
-        </TouchableOpacity>
-      </ScrollView>
+          <TouchableOpacity 
+              onPress={handleSave} 
+              disabled={updating}
+              className="bg-[#808CEA] p-5 rounded-full items-center mb-10 shadow-lg shadow-[#808CEA]/30"
+          >
+              {updating ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Save Changes</Text>}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

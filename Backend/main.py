@@ -60,7 +60,8 @@ cipher = Fernet(ENCRYPTION_KEY.encode())
 client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
 engine_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url=THERAPY_ENGINE_BASE_URL)
 GROQ_MODEL = "llama-3.3-70b-versatile"
-GROQ_FALLBACK_MODEL = "llama-3.3-70b-versatile"
+GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant"
+GROQ_FALLBACK_MODELS = ["llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]
 
 # --- SCHEMA VERSIONING ---
 CURRENT_SCHEMA_VERSION = "v1"
@@ -217,19 +218,31 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
         kwargs["max_tokens"] = max_tokens
 
     def fallback_to_groq():
-        logger.info("Falling back to Groq primary client...")
+        logger.info("Falling back to Groq primary client with rate limit rotation...")
+        fallback_kwargs = kwargs.copy()
+        fallback_kwargs["frequency_penalty"] = frequency_penalty
+        fallback_kwargs["presence_penalty"] = presence_penalty
+        if response_format:
+            fallback_kwargs["response_format"] = response_format
+
+        # 1. Try primary Groq model first
         try:
-            fallback_kwargs = kwargs.copy()
             fallback_kwargs["model"] = GROQ_MODEL
-            fallback_kwargs["frequency_penalty"] = frequency_penalty
-            fallback_kwargs["presence_penalty"] = presence_penalty
-            if response_format:
-                fallback_kwargs["response_format"] = response_format
-            res = client.chat.completions.create(**fallback_kwargs, timeout=30.0)
+            res = client.chat.completions.create(**fallback_kwargs, timeout=45.0)
             return res
-        except Exception as fallback_e:
-            logger.error(f"Fallback to Groq also failed: {fallback_e}")
-            raise fallback_e
+        except Exception as primary_e:
+            logger.error(f"Primary Groq model failed: {primary_e}")
+            if "rate limit" in str(primary_e).lower() or "429" in str(primary_e).lower() or "limit exceeded" in str(primary_e).lower():
+                # 2. Cycle through fallback models
+                for fallback_model in GROQ_FALLBACK_MODELS:
+                    logger.info(f"Retrying Groq fallback: {fallback_model}...")
+                    try:
+                        fallback_kwargs["model"] = fallback_model
+                        res = client.chat.completions.create(**fallback_kwargs, timeout=45.0)
+                        return res
+                    except Exception as fallback_e:
+                        logger.error(f"Fallback to {fallback_model} failed: {fallback_e}")
+            raise primary_e
 
     if client_type == "engine":
         global engine_consecutive_failures, engine_circuit_broken, engine_circuit_broken_until
@@ -243,13 +256,14 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
                     logger.info("Circuit Breaker: Cooldown expired. Transitioning to half-open, testing connection...")
                     engine_circuit_broken = False
 
-        max_attempts = 4
+        # RunPod timeouts increased (e.g., 50s first, 70s second) to prevent timing out during container cold starts
+        max_attempts = 3
         backoff_factor = 2.0
-        delay = 2.0
+        delay = 3.0
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.info(f"Connecting to RunPod engine... Attempt {attempt}/{max_attempts}")
-                attempt_timeout = 10.0 + (attempt * 5.0)
+                attempt_timeout = 40.0 + (attempt * 20.0)
                 res = selected_client.chat.completions.create(**kwargs, timeout=attempt_timeout)
                 
                 # Reset circuit breaker on success
@@ -277,8 +291,8 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
             logger.warning(f"Circuit Breaker: RunPod engine failure count = {engine_consecutive_failures}/3")
             if engine_consecutive_failures >= 3:
                 engine_circuit_broken = True
-                engine_circuit_broken_until = time.time() + 60.0
-                logger.error("Circuit Breaker: RunPod engine failed 3 consecutive times. Tripping circuit! Cooldown active for 60s.")
+                engine_circuit_broken_until = time.time() + 120.0 # Keep circuit broken for 2 minutes to let Pod fully spin up
+                logger.error("Circuit Breaker: RunPod engine failed 3 consecutive times. Tripping circuit! Cooldown active for 120s.")
                 
         return fallback_to_groq()
             
@@ -287,21 +301,17 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
         return res
     except Exception as e:
         logger.error(f"Completion failed for client_type={client_type}: {e}")
-        # Check for rate limit error (429 or "rate limit")
-        if not force_fallback and model_to_use == GROQ_MODEL and ("rate limit" in str(e).lower() or "429" in str(e).lower()):
-            logger.warning(f"Rate limit hit for primary model {GROQ_MODEL}. Retrying with fallback model {GROQ_FALLBACK_MODEL}...")
-            try:
-                kwargs["model"] = GROQ_FALLBACK_MODEL
-                if client_type != "engine":
-                    kwargs["frequency_penalty"] = frequency_penalty
-                    kwargs["presence_penalty"] = presence_penalty
-                    if response_format:
-                        kwargs["response_format"] = response_format
-                res = selected_client.chat.completions.create(**kwargs)
-                return res
-            except Exception as fallback_e:
-                logger.error(f"Fallback model also failed: {fallback_e}")
-                raise fallback_e
+        # Check for rate limit error (429 or "rate limit" or "limit exceeded")
+        if client_type != "engine" and ("rate limit" in str(e).lower() or "429" in str(e).lower() or "limit exceeded" in str(e).lower()):
+            for fallback_model in GROQ_FALLBACK_MODELS:
+                logger.warning(f"Rate limit hit. Retrying with fallback model {fallback_model}...")
+                try:
+                    kwargs["model"] = fallback_model
+                    res = selected_client.chat.completions.create(**kwargs)
+                    return res
+                except Exception as fallback_e:
+                    logger.error(f"Fallback model {fallback_model} also failed: {fallback_e}")
+            raise e
         else:
             raise e
 
@@ -2692,6 +2702,17 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
     db.commit()
     return {"status": "success"}
 
+@app.put("/api/profile/update")
+def update_profile(data: ProfileUpdate, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(firebase_uid=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.name = data.name
+    user.emergency_name = data.emergency_name
+    user.emergency_phone = data.emergency_phone
+    db.commit()
+    return {"status": "success"}
+
 # --- GOALS API ---
 
 @app.post("/api/goals")
@@ -2884,11 +2905,11 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
         return {"status": "created", "plan_id": new_plan.id}
 
 def runpod_heartbeat_worker():
-    """Background worker that pings the RunPod engine every 5 minutes to prevent cold starts."""
+    """Background worker that pings the RunPod engine every 90 seconds to prevent cold starts."""
     logger.info("Starting RunPod engine heartbeat/warm-up worker...")
     while not shutdown_event.is_set():
-        # Sleep for 5 minutes (300 seconds), but check shutdown_event periodically (every 5 seconds) to allow clean exit
-        for _ in range(60):
+        # Sleep for 1.5 minutes (90 seconds), checking shutdown_event every 5 seconds
+        for _ in range(18):
             if shutdown_event.is_set():
                 break
             time.sleep(5)

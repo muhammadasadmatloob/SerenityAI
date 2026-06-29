@@ -3,7 +3,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
-import { HeartPulse } from "lucide-react-native";
+
 import { AnimatePresence, MotiText, MotiView } from "moti";
 import { useEffect, useState, useRef } from "react";
 import { Text, View, Dimensions, Image, StyleSheet, TouchableOpacity, LogBox } from "react-native";
@@ -331,16 +331,20 @@ export default function RootLayout() {
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring" }}
                 >
-                  <HeartPulse size={90} color="white" strokeWidth={1.2} />
+                  <Image
+                    source={require("../assets/images/icon.png")}
+                    style={{ width: 120, height: 120, borderRadius: 30 }}
+                    resizeMode="contain"
+                  />
                 </MotiView>
                 
                 <MotiText 
                   from={{ opacity: 0, translateY: 30 }} 
                   animate={{ opacity: 1, translateY: 0 }} 
                   transition={{ delay: 400 }} 
-                  className="text-white text-6xl font-extrabold mt-12 tracking-[8px]"
+                  className="text-white text-5xl font-extrabold mt-12 tracking-[6px]"
                 >
-                  DONNA AI
+                  SERENITY AI
                 </MotiText>
                 
                 {networkError ? (

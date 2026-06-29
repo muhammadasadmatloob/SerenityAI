@@ -5,6 +5,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -32,6 +33,7 @@ export default function InfoScreen() {
     latitude: number;
     longitude: number;
   } | null>(null);
+  const [address, setAddress] = useState("");
   const [eName, setEName] = useState("");
   const [ePhone, setEPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -42,16 +44,46 @@ export default function InfoScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Required", "To provide the best support, we need your general area.");
+        Alert.alert("Permission Required", "To provide the best support, we need your location permission.");
         return;
       }
-      const currentLoc = await Location.getCurrentPositionAsync({});
-      setLocation({
-        latitude: currentLoc.coords.latitude,
-        longitude: currentLoc.coords.longitude,
+      
+      const currentLoc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
       });
-    } catch {
-      Alert.alert("Connection Error", "We couldn't reach the GPS.");
+      
+      const lat = currentLoc.coords.latitude;
+      const lng = currentLoc.coords.longitude;
+      
+      setLocation({
+        latitude: lat,
+        longitude: lng,
+      });
+
+      // Reverse geocode to get the exact address
+      const geocode = await Location.reverseGeocodeAsync({
+        latitude: lat,
+        longitude: lng,
+      });
+
+      if (geocode && geocode.length > 0) {
+        const addr = geocode[0];
+        const parts = [
+          addr.name,       // house/building name
+          addr.street,     // street
+          addr.district,   // subregion
+          addr.city,       // city
+          addr.region,     // state
+          addr.country,    // country
+        ].filter(Boolean);
+        const fullAddr = parts.join(", ");
+        setAddress(fullAddr || `Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`);
+      } else {
+        setAddress(`Lat: ${lat.toFixed(5)}, Lng: ${lng.toFixed(5)}`);
+      }
+    } catch (err) {
+      console.log(err);
+      Alert.alert("Location Error", "We couldn't retrieve your location. Make sure GPS is enabled.");
     } finally {
       setLocating(false);
     }
@@ -60,6 +92,12 @@ export default function InfoScreen() {
   const handleContinue = async () => {
     if (!name || !eName || !ePhone || !location) {
       Alert.alert("Almost there!", "Please fill in all details.");
+      return;
+    }
+
+    const phoneRegex = /^\+\d{1,4}\d{10}$/;
+    if (!phoneRegex.test(ePhone)) {
+      Alert.alert("Invalid Phone Number", "Phone number must start with + followed by the country code and exactly 10 digits (e.g., +923331234567).");
       return;
     }
     
@@ -118,8 +156,8 @@ export default function InfoScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#FBFBFF]">
       <Stack.Screen options={{ gestureEnabled: false, headerShown: false }} />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
-        <ScrollView contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
+        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View className="px-8 pt-12 pb-10">
             <View className="mb-10 items-center">
               <Text className="text-4xl font-light text-[#1A1C1E] tracking-tight">
@@ -161,12 +199,24 @@ export default function InfoScreen() {
               <TouchableOpacity
                 onPress={handleGetLocation}
                 disabled={locating}
-                className={`px-6 py-5 rounded-3xl mb-8 flex-row items-center justify-center border-2 border-dashed ${
+                className={`px-6 py-5 rounded-3xl mb-4 flex-row items-center justify-center border-2 border-dashed ${
                   location ? "bg-[#F0FFF4] border-[#68D391]" : "bg-[#EDF2F7] border-[#CBD5E0]"
                 }`}
               >
                 {locating ? <ActivityIndicator color="#808CEA" /> : <Text className="font-semibold text-gray-700">{location ? "✓ Location synced" : "📍 Enable Location"}</Text>}
               </TouchableOpacity>
+
+              {location && (
+                <View className="bg-white p-4 rounded-3xl border border-[#E2E8F0] mb-4 overflow-hidden items-center shadow-sm">
+                  <Text className="text-gray-500 text-xs font-bold uppercase mb-2 self-start">Location Details</Text>
+                  <Image
+                    source={{ uri: `https://static-maps.yandex.ru/1.x/?ll=${location.longitude},${location.latitude}&z=16&l=map&size=600,300&pt=${location.longitude},${location.latitude},pm2rdm` }}
+                    style={{ width: "100%", height: 150, borderRadius: 16 }}
+                    resizeMode="cover"
+                  />
+                  <Text className="text-gray-700 text-sm mt-3 text-center px-2 font-medium">{address}</Text>
+                </View>
+              )}
 
               <View className="bg-white p-6 rounded-[40px] border border-[#E2E8F0]">
                 <TextInput

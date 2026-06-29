@@ -1737,10 +1737,11 @@ def start_sess(
     if not user:
         try:
             f_user = auth.get_user(uid)
-            email_val = f_user.email or "unknown@gmail.com"
+            email_val = f_user.email or f"unknown_{uid}@serenityai.com"
             name_val = f_user.display_name or "Friend"
-        except Exception:
-            email_val = "unknown@gmail.com"
+        except Exception as auth_e:
+            logger.error(f"Firebase auth lookup failed: {auth_e}")
+            email_val = f"unknown_{uid}@serenityai.com"
             name_val = "Friend"
         
         user = User(firebase_uid=uid, email=email_val, name=name_val)
@@ -2626,10 +2627,11 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
     if not user:
         try:
             f_user = auth.get_user(uid)
-            user = User(firebase_uid=uid, email=f_user.email)
+            user = User(firebase_uid=uid, email=f_user.email or f"unknown_{uid}@serenityai.com")
             db.add(user)
-        except:
-            user = User(firebase_uid=uid, email="unknown@gmail.com")
+        except Exception as auth_e:
+            logger.error(f"Firebase auth lookup failed in sync_info: {auth_e}")
+            user = User(firebase_uid=uid, email=f"unknown_{uid}@serenityai.com")
             db.add(user)
     
     user.name = data.name

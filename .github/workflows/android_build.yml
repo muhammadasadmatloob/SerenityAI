@@ -1,0 +1,101 @@
+name: Android Release Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build Signed Android Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout codebase
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Node.js environment
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'Frontend/package-lock.json'
+
+      # 3. Set up JDK 17 (required for Expo v54 / React Native release builds)
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      # 4. Verify Production URL Pre-flight Checks
+      - name: Verify Production URL
+        run: |
+          echo "🔍 Running pre-flight verification checks on API endpoints..."
+          
+          # Check config.ts for correct production URL
+          if [ -f "Frontend/constants/config.ts" ]; then
+            echo "Checking Frontend/constants/config.ts..."
+            grep -q "https://serenityai-93qt.onrender.com" Frontend/constants/config.ts || {
+              echo "❌ Error: Production URL is not set correctly in config.ts!"
+              exit 1
+            }
+            echo "✅ config.ts URL check passed."
+          else
+            echo "⚠️ config.ts not found, skipping."
+          fi
+
+          # Check api.js if it exists
+          if [ -f "Frontend/api.js" ]; then
+            echo "Checking Frontend/api.js..."
+            grep -q "https://serenityai-93qt.onrender.com" Frontend/api.js || {
+              echo "❌ Error: BASE_URL is not set correctly in api.js!"
+              exit 1
+            }
+            echo "✅ api.js URL check passed."
+          fi
+
+      # 5. Install Node Dependencies
+      - name: Install Frontend Dependencies
+        run: |
+          cd Frontend
+          npm ci --legacy-peer-deps
+
+      # 6. Run Expo Prebuild to generate the native android project folder
+      - name: Generate Android Native Project
+        run: |
+          cd Frontend
+          npx expo prebuild --platform android --no-interactive
+
+      # 7. Decode my-upload-key.keystore from Base64 secret
+      - name: Decode Android Keystore
+        run: |
+          echo "${{ secrets.MYAPP_RELEASE_STORE_FILE_BASE64 }}" | base64 --decode > Frontend/android/app/my-upload-key.keystore
+
+      # 8. Append signing variables to gradle.properties and compile
+      - name: Build and Sign Release APK
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.MYAPP_RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.MYAPP_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.MYAPP_RELEASE_KEY_PASSWORD }}
+        run: |
+          cd Frontend/android
+          
+          # Inject release signing configuration variables into gradle.properties
+          echo "MYAPP_RELEASE_STORE_FILE=my-upload-key.keystore" >> gradle.properties
+          echo "MYAPP_RELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD" >> gradle.properties
+          echo "MYAPP_RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS" >> gradle.properties
+          echo "MYAPP_RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD" >> gradle.properties
+          
+          # Compile the signed release APK
+          ./gradlew assembleRelease --no-daemon
+
+      # 9. Upload the final compiled APK as a GitHub Action artifact
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: Frontend/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error

@@ -71,7 +71,7 @@ const getDevServerIp = (): string | null => {
 
 const devIp = getDevServerIp();
 
-export const PRODUCTION_URL = "https://serenityai-93qt.onrender.com";
+export const PRODUCTION_URL = process.env.EXPO_PUBLIC_PRODUCTION_URL || "https://serenityai-93qt.onrender.com";
 
 // Initial URL setup (fallback defaults)
 let initialUrl = PRODUCTION_URL;
@@ -89,15 +89,16 @@ const checkBackendOnline = async (url: string, timeoutMs: number = 2000): Promis
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
+    // Poll the /api/health endpoint
+    const healthUrl = url.endsWith('/') ? `${url}api/health` : `${url}/api/health`;
+    const res = await fetch(healthUrl, {
       signal: controller.signal,
       headers: { 'Cache-Control': 'no-cache' }
     });
     if (res.ok) {
       const data = await res.json();
       clearTimeout(timeoutId);
-      // Backend home route / returns {"status": "Donna AI Backend is Online" or similar}
-      if (data && data.status && data.status.toLowerCase().includes("donna")) {
+      if (data && data.status === "ok") {
         return true;
       }
     }
@@ -120,103 +121,31 @@ export const waitForBackendDiscovery = () => discoveryPromise;
 // Autodiscovery function
 const runAutoDiscovery = async () => {
   try {
-    // 0. Prioritize the Render production backend URL first (with a longer timeout to allow cold start / spin up)
-    console.log("🔎 config: Trying Render production backend URL (allowing spin-up):", PRODUCTION_URL);
-    if (await checkBackendOnline(PRODUCTION_URL, 15000)) {
-      setBackendUrl(PRODUCTION_URL);
-      await AsyncStorage.setItem(STORAGE_KEY, PRODUCTION_URL);
+    // 1. Primary Check: Render production URL (allowing spin-up/cold start)
+    console.log("🔎 config: Trying primary Render production URL:", PRODUCTION_URL);
+    const maxRetries = 2;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`🔎 config: Attempt ${attempt}/${maxRetries} to connect to primary Render backend...`);
+      if (await checkBackendOnline(PRODUCTION_URL, 10000)) {
+        setBackendUrl(PRODUCTION_URL);
+        await AsyncStorage.setItem(STORAGE_KEY, PRODUCTION_URL);
+        return;
+      }
+      if (attempt < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+
+    // 2. Fallback Check: Dev Server IP or Localhost
+    const fallbackUrl = devIp ? `http://${devIp}:8000` : "http://localhost:8000";
+    console.log("🔎 config: Trying fallback dev backend URL:", fallbackUrl);
+    if (await checkBackendOnline(fallbackUrl, 3000)) {
+      setBackendUrl(fallbackUrl);
+      await AsyncStorage.setItem(STORAGE_KEY, fallbackUrl);
       return;
     }
 
-    // 1. Try to load cached successful URL from AsyncStorage
-    const cachedUrl = await AsyncStorage.getItem(STORAGE_KEY);
-    if (cachedUrl && cachedUrl !== PRODUCTION_URL) {
-      console.log("🔎 config: Trying cached backend URL:", cachedUrl);
-      if (await checkBackendOnline(cachedUrl, 2000)) {
-        setBackendUrl(cachedUrl);
-        return;
-      }
-    }
-
-
-    // 2. Try the resolved dev server IP
-    if (devIp) {
-      const devUrl = `http://${devIp}:8000`;
-      console.log("🔎 config: Trying dev server IP URL:", devUrl);
-      if (await checkBackendOnline(devUrl, 2000)) {
-        setBackendUrl(devUrl);
-        await AsyncStorage.setItem(STORAGE_KEY, devUrl);
-        return;
-      }
-    }
-
-    // 3. Try Emulator Loopbacks
-    const androidEmulatorUrl = "http://10.0.2.2:8000";
-    if (Platform.OS === 'android' && devIp !== "10.0.2.2") {
-      if (await checkBackendOnline(androidEmulatorUrl, 1500)) {
-        setBackendUrl(androidEmulatorUrl);
-        await AsyncStorage.setItem(STORAGE_KEY, androidEmulatorUrl);
-        return;
-      }
-    }
-
-    const iosSimulatorUrl = "http://localhost:8000";
-    if (Platform.OS === 'ios' && devIp !== "localhost") {
-      if (await checkBackendOnline(iosSimulatorUrl, 1500)) {
-        setBackendUrl(iosSimulatorUrl);
-        await AsyncStorage.setItem(STORAGE_KEY, iosSimulatorUrl);
-        return;
-      }
-    }
-
-    // 4. Scan current local subnet dynamically (IPv4 fallback only to avoid IPv6 errors)
-    const ipAddress = await Network.getIpAddressAsync();
-    if (ipAddress && ipAddress !== "0.0.0.0" && ipAddress !== "127.0.0.1" && !ipAddress.includes(":")) {
-      console.log("📱 config: Device IP Address:", ipAddress);
-      
-      const lastDotIndex = ipAddress.lastIndexOf('.');
-      if (lastDotIndex !== -1) {
-        const subnetPrefix = ipAddress.substring(0, lastDotIndex);
-        console.log(`🌐 config: Scanning subnet: ${subnetPrefix}.x`);
-
-        // Generate IP sweep range (1 to 254)
-        const ipTargets: string[] = [];
-        for (let i = 1; i <= 254; i++) {
-          const targetIp = `${subnetPrefix}.${i}`;
-          // Don't scan the device's own IP
-          if (targetIp !== ipAddress) {
-            ipTargets.push(targetIp);
-          }
-        }
-
-        // Run sweep checks in parallel batches of 50 to avoid socket resource exhaustion
-        // 300ms is standard timeout for local network sweep
-        const BATCH_SIZE = 50;
-        const PING_TIMEOUT = 300;
-        for (let i = 0; i < ipTargets.length; i += BATCH_SIZE) {
-          const batch = ipTargets.slice(i, i + BATCH_SIZE);
-          
-          // Execute batch checks
-          const results = await Promise.all(
-            batch.map(async (ip) => {
-              const url = `http://${ip}:8000`;
-              const isOnline = await checkBackendOnline(url, PING_TIMEOUT);
-              return { url, isOnline };
-            })
-          );
-
-          // Check if any IP in this batch succeeded
-          const successfulTarget = results.find(r => r.isOnline);
-          if (successfulTarget) {
-            const discoveredUrl = successfulTarget.url;
-            console.log("🎉 config: Discovered backend at:", discoveredUrl);
-            setBackendUrl(discoveredUrl);
-            await AsyncStorage.setItem(STORAGE_KEY, discoveredUrl);
-            return;
-          }
-        }
-      }
-    }
+    console.log("❌ config: Both primary and fallback URLs failed to connect.");
   } catch (err) {
     console.log("⚠️ config: Autodiscovery Error:", err);
   }
@@ -226,7 +155,7 @@ const runAutoDiscovery = async () => {
 // If offline, it triggers a subnet sweep.
 export const verifyAndDiscover = async () => {
   console.log("🔍 config: Checking backend status at current BACKEND_URL:", BACKEND_URL);
-  const checkTimeout = BACKEND_URL === PRODUCTION_URL ? 5000 : 2000;
+  const checkTimeout = BACKEND_URL === PRODUCTION_URL ? 10000 : 2000;
   const isOnline = await checkBackendOnline(BACKEND_URL, checkTimeout);
 
   if (isOnline) {

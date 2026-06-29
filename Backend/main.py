@@ -1,8 +1,13 @@
 import os
 import datetime
+import time
+import openai
+import contextvars
 from functools import lru_cache
 import json
 import re
+
+llm_payload_context = contextvars.ContextVar("llm_payload_context", default=None)
 from typing import Optional, List, Dict, Any
 import logging
 import concurrent.futures
@@ -45,6 +50,22 @@ ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
 ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME")
+
+# Validate required environment variables immediately on startup
+required_env_vars = {
+    "GROQ_API_KEY": GROQ_API_KEY,
+    "FIREBASE_JSON_CONTENT": os.getenv("FIREBASE_JSON_CONTENT"),
+    "ENGINE_MODEL_NAME": ENGINE_MODEL_NAME,
+}
+
+missing_vars = [name for name, val in required_env_vars.items() if not val or not val.strip()]
+if missing_vars:
+    print("\n" + "="*80)
+    print("❌ CRITICAL CONFIGURATION ERROR: MISSING ENVIRONMENT VARIABLES")
+    print(f"The following required environment variables are missing or empty: {', '.join(missing_vars)}")
+    print("Please configure them in your .env file or environment settings.")
+    print("="*80 + "\n")
+    logger.critical(f"Missing environment variables on startup: {missing_vars}")
 
 if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY missing in .env")
@@ -119,43 +140,66 @@ except (OSError, ValueError):
     pass
 
 def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format=None, force_fallback=False, default_model=None, max_tokens=None, frequency_penalty=0.0, presence_penalty=0.0, client_type: str = "groq"):
+    # Store the messages in context for debugging on error
+    llm_payload_context.set(messages)
+    
     model_to_use = ENGINE_MODEL_NAME if client_type == "engine" else (default_model if default_model else (GROQ_FALLBACK_MODEL if force_fallback else GROQ_MODEL))
     selected_client = engine_client if client_type == "engine" else client
-    try:
-        kwargs = {
-            "model": model_to_use,
-            "messages": messages,
-            "temperature": temperature,
-            "top_p": top_p,
-        }
-        if client_type != "engine":
+    
+    kwargs = {
+        "model": model_to_use,
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": top_p,
+    }
+    if client_type != "engine":
+        kwargs["frequency_penalty"] = frequency_penalty
+        kwargs["presence_penalty"] = presence_penalty
+        if response_format:
+            kwargs["response_format"] = response_format
+    if max_tokens:
+        kwargs["max_tokens"] = max_tokens
+
+    if client_type == "engine":
+        max_attempts = 4
+        backoff_factor = 2.0
+        delay = 2.0
+        for attempt in range(1, max_attempts + 1):
+            try:
+                logger.info(f"Connecting to RunPod engine... Attempt {attempt}/{max_attempts}")
+                attempt_timeout = 10.0 + (attempt * 5.0)
+                res = selected_client.chat.completions.create(**kwargs, timeout=attempt_timeout)
+                return res
+            except (openai.APITimeoutError, openai.APIConnectionError) as e:
+                if attempt == max_attempts:
+                    logger.error(f"RunPod engine failed after {max_attempts} attempts: {e}")
+                    break
+                logger.warning(f"RunPod engine connection timed out/failed (attempt {attempt}). Retrying in {delay}s...")
+                time.sleep(delay)
+                delay *= backoff_factor
+            except Exception as e:
+                logger.error(f"RunPod engine encountered an error: {e}")
+                break
+        
+        # Fall back to Groq if the retry loop fails
+        logger.info("Falling back to Groq primary client...")
+        try:
+            kwargs["model"] = GROQ_MODEL
             kwargs["frequency_penalty"] = frequency_penalty
             kwargs["presence_penalty"] = presence_penalty
             if response_format:
                 kwargs["response_format"] = response_format
-        if max_tokens:
-            kwargs["max_tokens"] = max_tokens
+            res = client.chat.completions.create(**kwargs, timeout=30.0)
+            return res
+        except Exception as fallback_e:
+            logger.error(f"Fallback to Groq also failed: {fallback_e}")
+            raise fallback_e
             
-        request_timeout = 300.0 if client_type == "engine" else None
-        res = selected_client.chat.completions.create(**kwargs, timeout=request_timeout)
+    try:
+        res = selected_client.chat.completions.create(**kwargs)
         return res
     except Exception as e:
         logger.error(f"Completion failed for client_type={client_type}: {e}")
-        # If the fine-tuned engine on RunPod failed or timed out, fall back to Groq
-        if client_type == "engine":
-            logger.info("Falling back to Groq primary client...")
-            try:
-                kwargs["model"] = GROQ_MODEL
-                kwargs["frequency_penalty"] = frequency_penalty
-                kwargs["presence_penalty"] = presence_penalty
-                if response_format:
-                    kwargs["response_format"] = response_format
-                res = client.chat.completions.create(**kwargs, timeout=30.0)
-                return res
-            except Exception as fallback_e:
-                logger.error(f"Fallback to Groq also failed: {fallback_e}")
-                raise fallback_e
-
         # Check for rate limit error (429 or "rate limit")
         if not force_fallback and model_to_use == GROQ_MODEL and ("rate limit" in str(e).lower() or "429" in str(e).lower()):
             logger.warning(f"Rate limit hit for primary model {GROQ_MODEL}. Retrying with fallback model {GROQ_FALLBACK_MODEL}...")
@@ -230,6 +274,12 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled Exception: {type(exc).__name__}: {exc} | Path: {request.url.path}", exc_info=True)
+    
+    # Retrieve and print the exact LLM payload if it was set during this request context
+    payload = llm_payload_context.get()
+    if payload:
+        logger.error(f"LLM Payload at error: {json.dumps(payload, indent=2)}")
+        
     return JSONResponse(
         status_code=500,
         content={
@@ -320,6 +370,19 @@ class PasswordCheck(BaseModel):
 @app.get("/")
 def home():
     return {"status": "Donna AI Backend is Online"}
+
+@app.get("/api/health")
+def health_check(db: Session = Depends(get_db)):
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
+    try:
+        # Check Groq connectivity by listing models
+        client.models.list()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Groq API connection failed: {e}")
+    return {"status": "ok"}
 
 @app.post("/api/auth/validate-password")
 def check_password_strength(data: PasswordCheck):
@@ -763,16 +826,17 @@ def hybrid_ai_router(messages, current_phase: str, path: str = None, response_fo
         res_groq = None
         res_engine = None
         
-        # We enforce a timeout (e.g. 10 seconds) on the engine to avoid hanging if RunPod is down/sleeping.
+        # We enforce a timeout on the queries to avoid hanging. Groq has a 10s timeout,
+        # but the RunPod engine has a 90s timeout to allow for cold start initialization.
         try:
             res_groq = future_groq.result(timeout=10.0)
         except Exception as e:
             logger.error(f"Groq parallel call failed: {e}")
             
         try:
-            res_engine = future_engine.result(timeout=10.0)
+            res_engine = future_engine.result(timeout=90.0)
         except Exception as e:
-            logger.error(f"RunPod Engine parallel call failed/timed out: {e}")
+            logger.error(f"RunPod Engine parallel call failed/timed out after 90s: {e}")
 
     # Case 1: Both succeeded - merge their replies
     if res_groq and res_engine:
@@ -1518,6 +1582,57 @@ def update_session_summary_task(session_id: int, uid: str):
         db.close()
         _unregister_task()
 
+def background_session_warmup_processor(future_llm, session_id_val: int, uid: str, user_msg_id: Optional[int]):
+    """Background task to wait for the timed-out LLM startup call, check for crisis events, and run the pipeline."""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        logger.info(f"⏳ Background Session Warm-up Processor: Awaiting LLM response for session {session_id_val}...")
+        # Await the completion of the future (no timeout)
+        res = future_llm.result()
+        raw_reply = res.choices[0].message.content or ""
+        parsed_data = parse_llm_response(raw_reply)
+        
+        # Urgency/Crisis check from LLM output
+        risk_info = parsed_data.get("risk_analysis", {})
+        urgency = int(risk_info.get("urgency_score", 1))
+        
+        has_crisis = False
+        crisis_details_val = ""
+        action_taken_val = ""
+        
+        if risk_info.get("suicide_risk") is True or risk_info.get("self_harm") is True or risk_info.get("crisis") is True:
+            has_crisis = True
+            crisis_details_val = risk_info.get("risk_details", "LLM-detected suicide/self-harm risk")
+            action_taken_val = "Safety override triggered in background."
+        elif risk_info.get("violence") is True or risk_info.get("abuse") is True or risk_info.get("domestic_violence") is True:
+            has_crisis = True
+            crisis_details_val = risk_info.get("risk_details", "LLM-detected violence/abuse/domestic boundary breach")
+            action_taken_val = "Violence boundary override in background."
+            
+        if has_crisis:
+            logger.warning(f"⚠️ Crisis detected in background for session {session_id_val}. Saving CrisisEvent...")
+            crisis_event = CrisisEvent(
+                session_id=session_id_val,
+                user_uid=uid,
+                trigger_message_id=user_msg_id,
+                urgency_score=urgency,
+                crisis_details=crisis_details_val,
+                action_taken=action_taken_val
+            )
+            db.add(crisis_event)
+            db.commit()
+            
+        # Run background pipeline therapeutic analysis
+        if user_msg_id is not None:
+            logger.info(f"🚀 Running background therapeutic pipeline for session {session_id_val}...")
+            run_background_pipeline(session_id_val, uid, user_msg_id, parsed_data)
+            
+    except Exception as e:
+        logger.error(f"Error in background_session_warmup_processor: {e}")
+    finally:
+        db.close()
+
 @app.post("/api/session/start")
 def start_sess(
     data: SessionStart, 
@@ -1637,57 +1752,84 @@ def start_sess(
         messages.append({"role": "user", "content": f"Hello Donna, I am feeling {mood_str}."})
     
     try:
-        res = hybrid_ai_router(
-            messages=messages,
-            current_phase="rapport_building",
-            path=path_to_use,
-            response_format={"type": "json_object"}
-        )
-        raw_reply = res.choices[0].message.content or ""
-        parsed_data = parse_llm_response(raw_reply)
-        
-        # Urgency/Crisis check from LLM output
-        risk_info = parsed_data.get("risk_analysis", {})
-        urgency = int(risk_info.get("urgency_score", 1))
-        
-        if risk_info.get("suicide_risk") is True or risk_info.get("self_harm") is True or risk_info.get("crisis") is True:
-            # Overwrite response with safety guidelines and record crisis event
-            crisis_event = CrisisEvent(
-                session_id=session_id_val,
-                user_uid=uid,
-                trigger_message_id=user_msg_id,
-                urgency_score=urgency,
-                crisis_details=risk_info.get("risk_details", "LLM-detected suicide/self-harm risk"),
-                action_taken="Safety override triggered."
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as start_executor:
+            future_llm = start_executor.submit(
+                hybrid_ai_router,
+                messages=messages,
+                current_phase="rapport_building",
+                path=path_to_use,
+                response_format={"type": "json_object"}
             )
-            db.add(crisis_event)
-            ai_msg_text = CRISIS_RESPONSE
-        elif risk_info.get("violence") is True or risk_info.get("abuse") is True or risk_info.get("domestic_violence") is True:
-            crisis_event = CrisisEvent(
-                session_id=session_id_val,
-                user_uid=uid,
-                trigger_message_id=user_msg_id,
-                urgency_score=urgency,
-                crisis_details=risk_info.get("risk_details", "LLM-detected violence/abuse/domestic boundary breach"),
-                action_taken="Violence boundary override"
-            )
-            db.add(crisis_event)
-            ai_msg_text = BOUNDARY_RESPONSE
-        else:
-            ai_msg_text = parsed_data.get("therapeutic_response", "I'm here for you. How can we start today?")
-        
-        # Save AI reply
-        ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(ai_msg_text))
-        db.add(ai_msg)
-        db.commit()
-        
-        # Save MessageAnalysis & trigger pipeline updates in background
-        if user_msg_id is not None:
-            background_tasks.add_task(run_background_pipeline, session_id_val, uid, user_msg_id, parsed_data)
-            
-        return {"session_id": session_id_val, "first_message": ai_msg_text}
+            try:
+                # Wait for 5 seconds for the LLM response
+                res = future_llm.result(timeout=5.0)
+                
+                # If successful, parse it normally as before
+                raw_reply = res.choices[0].message.content or ""
+                parsed_data = parse_llm_response(raw_reply)
+                
+                # Urgency/Crisis check from LLM output
+                risk_info = parsed_data.get("risk_analysis", {})
+                urgency = int(risk_info.get("urgency_score", 1))
+                
+                if risk_info.get("suicide_risk") is True or risk_info.get("self_harm") is True or risk_info.get("crisis") is True:
+                    crisis_event = CrisisEvent(
+                        session_id=session_id_val,
+                        user_uid=uid,
+                        trigger_message_id=user_msg_id,
+                        urgency_score=urgency,
+                        crisis_details=risk_info.get("risk_details", "LLM-detected suicide/self-harm risk"),
+                        action_taken="Safety override triggered."
+                    )
+                    db.add(crisis_event)
+                    ai_msg_text = CRISIS_RESPONSE
+                elif risk_info.get("violence") is True or risk_info.get("abuse") is True or risk_info.get("domestic_violence") is True:
+                    crisis_event = CrisisEvent(
+                        session_id=session_id_val,
+                        user_uid=uid,
+                        trigger_message_id=user_msg_id,
+                        urgency_score=urgency,
+                        crisis_details=risk_info.get("risk_details", "LLM-detected violence/abuse/domestic boundary breach"),
+                        action_taken="Violence boundary override"
+                    )
+                    db.add(crisis_event)
+                    ai_msg_text = BOUNDARY_RESPONSE
+                else:
+                    ai_msg_text = parsed_data.get("therapeutic_response", "I'm here for you. How can we start today?")
+                
+                # Save AI reply
+                ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(ai_msg_text))
+                db.add(ai_msg)
+                db.commit()
+                
+                # Save MessageAnalysis & trigger pipeline updates in background
+                if user_msg_id is not None:
+                    background_tasks.add_task(run_background_pipeline, session_id_val, uid, user_msg_id, parsed_data)
+                    
+                return {"session_id": session_id_val, "first_message": ai_msg_text}
+                
+            except concurrent.futures.TimeoutError:
+                logger.info("start_sess: LLM response timed out (>5s). Triggering warm-up message and background analysis.")
+                
+                # Determine warm-up message based on mood
+                mood_str = data.mood.strip().lower()
+                if mood_str and mood_str != "neutral":
+                    ai_msg_text = f"I'm here for you. I see you marked that you're feeling {mood_str} today. What is on your mind?"
+                else:
+                    ai_msg_text = "I'm here for you. How can we start today?"
+                    
+                # Save AI warm-up reply to database
+                ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(ai_msg_text))
+                db.add(ai_msg)
+                db.commit()
+                
+                # Delegate the future result processing and pipeline analysis to a background task
+                background_tasks.add_task(background_session_warmup_processor, future_llm, session_id_val, uid, user_msg_id)
+                
+                return {"session_id": session_id_val, "first_message": ai_msg_text}
+                
     except Exception as e:
-        logger.error(f"Groq Error: {e}")
+        logger.error(f"Error in start_sess during LLM fetch: {e}")
         db.rollback()
         # Save fallback AI reply acknowledging the mood
         mood_str = data.mood.strip().lower()
@@ -2576,4 +2718,4 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
 
 if __name__ == "__main__":
     logger.info(f"Starting Donna AI Backend | Schema: {CURRENT_SCHEMA_VERSION} | Shutdown handlers: registered")
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

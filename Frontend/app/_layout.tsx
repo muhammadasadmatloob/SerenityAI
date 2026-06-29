@@ -1,4 +1,18 @@
-import { LogBox } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Stack, useRouter, useSegments } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, onSnapshot } from "firebase/firestore";
+import { HeartPulse } from "lucide-react-native";
+import { AnimatePresence, MotiText, MotiView } from "moti";
+import { useEffect, useState, useRef } from "react";
+import { Text, View, Dimensions, Image, StyleSheet, TouchableOpacity, LogBox } from "react-native";
+import * as Network from "expo-network";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { auth, db } from "../firebase/firebase"; 
+import { waitForBackendDiscovery, BACKEND_URL } from "../constants/config";
+import "../global.css";
+import TabBar from "./(components)/TabBar";
 
 // Intercept Firestore connection timeout/offline messages and downgrade them from Error to Warning,
 // preventing them from opening the React Native error/RedBox screen.
@@ -23,22 +37,6 @@ if (__DEV__) {
     "@firebase/firestore",
   ]);
 }
-
-import { LinearGradient } from "expo-linear-gradient";
-import { Stack, useRouter, useSegments } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
-import { HeartPulse } from "lucide-react-native";
-import { AnimatePresence, MotiText, MotiView } from "moti";
-import { useEffect, useState, useRef } from "react";
-import { Text, View, Dimensions, Image, StyleSheet, TouchableOpacity } from "react-native";
-import * as Network from "expo-network";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { auth, db } from "../firebase/firebase"; 
-import { waitForBackendDiscovery, BACKEND_URL, PRODUCTION_URL } from "../constants/config";
-import "../global.css";
-import TabBar from "./(components)/TabBar";
 
 // Prevent the native splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();

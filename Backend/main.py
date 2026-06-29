@@ -3,6 +3,7 @@ import datetime
 import time
 import openai
 import contextvars
+import requests
 from functools import lru_cache
 import json
 import re
@@ -51,22 +52,6 @@ THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
 ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME")
 
-# Validate required environment variables immediately on startup
-required_env_vars = {
-    "GROQ_API_KEY": GROQ_API_KEY,
-    "FIREBASE_JSON_CONTENT": os.getenv("FIREBASE_JSON_CONTENT"),
-    "ENGINE_MODEL_NAME": ENGINE_MODEL_NAME,
-}
-
-missing_vars = [name for name, val in required_env_vars.items() if not val or not val.strip()]
-if missing_vars:
-    print("\n" + "="*80)
-    print("❌ CRITICAL CONFIGURATION ERROR: MISSING ENVIRONMENT VARIABLES")
-    print(f"The following required environment variables are missing or empty: {', '.join(missing_vars)}")
-    print("Please configure them in your .env file or environment settings.")
-    print("="*80 + "\n")
-    logger.critical(f"Missing environment variables on startup: {missing_vars}")
-
 if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY missing in .env")
 
@@ -97,6 +82,12 @@ def validate_schema_version(data: dict, expected: str = CURRENT_SCHEMA_VERSION) 
 shutdown_event = threading.Event()
 _active_tasks_lock = threading.Lock()
 _active_task_count = 0
+
+# --- CIRCUIT BREAKER FOR RUNPOD ENGINE ---
+engine_consecutive_failures = 0
+engine_circuit_broken = False
+engine_circuit_broken_until = 0.0
+_circuit_breaker_lock = threading.Lock()
 
 def _register_task():
     """Increment the active background task counter."""
@@ -139,6 +130,71 @@ except (OSError, ValueError):
     # signal.signal can fail if not called from the main thread (e.g., during tests)
     pass
 
+def initialize_services():
+    """Verify configuration, validate secrets, and test API connectivity before startup."""
+    logger.info("Initializing services and validating environment variables...")
+    
+    # 1. Validate environment variables
+    required_vars = {
+        "GROQ_API_KEY": os.getenv("GROQ_API_KEY"),
+        "FIREBASE_JSON_CONTENT": os.getenv("FIREBASE_JSON_CONTENT"),
+        "ENGINE_MODEL_NAME": os.getenv("ENGINE_MODEL_NAME"),
+        "THERAPY_ENGINE_URL": os.getenv("THERAPY_ENGINE_URL"),
+    }
+    
+    missing_vars = [name for name, val in required_vars.items() if not val or not val.strip()]
+    if missing_vars:
+        logger.critical(f"❌ CRITICAL CONFIGURATION ERROR: The following required environment variables are missing or empty: {missing_vars}")
+        print("\n" + "="*80)
+        print("❌ CRITICAL CONFIGURATION ERROR: MISSING REQUIRED ENVIRONMENT VARIABLES")
+        print(f"Missing variables: {', '.join(missing_vars)}")
+        print("The application will now shut down.")
+        print("="*80 + "\n")
+        raise SystemExit(1)
+        
+    # Validate encryption key
+    if not os.getenv("ENCRYPTION_KEY"):
+        logger.critical("❌ CRITICAL: ENCRYPTION_KEY missing in .env")
+        raise SystemExit(1)
+
+    # 2. Verify Database Connection
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        logger.info("✅ Database connection validated successfully.")
+    except Exception as e:
+        logger.critical(f"❌ CRITICAL: Database connection validation failed: {e}")
+        raise SystemExit(1)
+    finally:
+        db.close()
+
+    # 3. Verify Groq API Connectivity
+    try:
+        client.models.list()
+        logger.info("✅ Groq API connectivity validated successfully.")
+    except Exception as e:
+        logger.critical(f"❌ CRITICAL: Groq API connectivity validation failed: {e}")
+        raise SystemExit(1)
+
+    # 4. Verify RunPod Engine Connectivity
+    try:
+        health_url = os.getenv("THERAPY_ENGINE_URL")
+        if "/v1" in health_url:
+            health_url = health_url.replace("/v1", "")
+        if not health_url.endswith("/health"):
+            health_url = health_url.rstrip("/") + "/health"
+            
+        res = requests.get(health_url, timeout=10.0)
+        if res.status_code == 200:
+            logger.info("✅ RunPod Engine connectivity validated successfully.")
+        else:
+            logger.warning(f"⚠️ RunPod Engine health check returned HTTP {res.status_code}: {res.text}")
+    except Exception as e:
+        logger.warning(f"⚠️ RunPod Engine health check connection failed during startup: {e}")
+
+    logger.info("🚀 All critical services validated successfully. Starting application server...")
+
 def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format=None, force_fallback=False, default_model=None, max_tokens=None, frequency_penalty=0.0, presence_penalty=0.0, client_type: str = "groq"):
     # Store the messages in context for debugging on error
     llm_payload_context.set(messages)
@@ -160,7 +216,33 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
     if max_tokens:
         kwargs["max_tokens"] = max_tokens
 
+    def fallback_to_groq():
+        logger.info("Falling back to Groq primary client...")
+        try:
+            fallback_kwargs = kwargs.copy()
+            fallback_kwargs["model"] = GROQ_MODEL
+            fallback_kwargs["frequency_penalty"] = frequency_penalty
+            fallback_kwargs["presence_penalty"] = presence_penalty
+            if response_format:
+                fallback_kwargs["response_format"] = response_format
+            res = client.chat.completions.create(**fallback_kwargs, timeout=30.0)
+            return res
+        except Exception as fallback_e:
+            logger.error(f"Fallback to Groq also failed: {fallback_e}")
+            raise fallback_e
+
     if client_type == "engine":
+        global engine_consecutive_failures, engine_circuit_broken, engine_circuit_broken_until
+        
+        with _circuit_breaker_lock:
+            if engine_circuit_broken:
+                if time.time() < engine_circuit_broken_until:
+                    logger.warning(f"Circuit Breaker: RunPod engine is currently disabled (cooldown active). Skipping engine call. Cooldown remaining: {int(engine_circuit_broken_until - time.time())}s")
+                    return fallback_to_groq()
+                else:
+                    logger.info("Circuit Breaker: Cooldown expired. Transitioning to half-open, testing connection...")
+                    engine_circuit_broken = False
+
         max_attempts = 4
         backoff_factor = 2.0
         delay = 2.0
@@ -169,6 +251,14 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
                 logger.info(f"Connecting to RunPod engine... Attempt {attempt}/{max_attempts}")
                 attempt_timeout = 10.0 + (attempt * 5.0)
                 res = selected_client.chat.completions.create(**kwargs, timeout=attempt_timeout)
+                
+                # Reset circuit breaker on success
+                with _circuit_breaker_lock:
+                    if engine_consecutive_failures > 0 or engine_circuit_broken:
+                        logger.info("Circuit Breaker: Connection succeeded. Resetting failure counter.")
+                    engine_consecutive_failures = 0
+                    engine_circuit_broken = False
+                    engine_circuit_broken_until = 0.0
                 return res
             except (openai.APITimeoutError, openai.APIConnectionError) as e:
                 if attempt == max_attempts:
@@ -181,19 +271,16 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
                 logger.error(f"RunPod engine encountered an error: {e}")
                 break
         
-        # Fall back to Groq if the retry loop fails
-        logger.info("Falling back to Groq primary client...")
-        try:
-            kwargs["model"] = GROQ_MODEL
-            kwargs["frequency_penalty"] = frequency_penalty
-            kwargs["presence_penalty"] = presence_penalty
-            if response_format:
-                kwargs["response_format"] = response_format
-            res = client.chat.completions.create(**kwargs, timeout=30.0)
-            return res
-        except Exception as fallback_e:
-            logger.error(f"Fallback to Groq also failed: {fallback_e}")
-            raise fallback_e
+        # Trip the circuit breaker on failure
+        with _circuit_breaker_lock:
+            engine_consecutive_failures += 1
+            logger.warning(f"Circuit Breaker: RunPod engine failure count = {engine_consecutive_failures}/3")
+            if engine_consecutive_failures >= 3:
+                engine_circuit_broken = True
+                engine_circuit_broken_until = time.time() + 60.0
+                logger.error("Circuit Breaker: RunPod engine failed 3 consecutive times. Tripping circuit! Cooldown active for 60s.")
+                
+        return fallback_to_groq()
             
     try:
         res = selected_client.chat.completions.create(**kwargs)
@@ -373,16 +460,61 @@ def home():
 
 @app.get("/api/health")
 def health_check(db: Session = Depends(get_db)):
+    db_status = "ok"
+    groq_status = "ok"
+    engine_status = "ok"
+    
+    # 1. Check DB
     try:
         db.execute(text("SELECT 1"))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database connection failed: {e}")
+        db_status = f"Database connection failed: {e}"
+        
+    # 2. Check Groq
     try:
-        # Check Groq connectivity by listing models
         client.models.list()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Groq API connection failed: {e}")
-    return {"status": "ok"}
+        groq_status = f"Groq API connection failed: {e}"
+        
+    # 3. Check RunPod Engine
+    if THERAPY_ENGINE_BASE_URL:
+        try:
+            health_url = THERAPY_ENGINE_BASE_URL
+            if "/v1" in health_url:
+                health_url = health_url.replace("/v1", "")
+            if not health_url.endswith("/health"):
+                health_url = health_url.rstrip("/") + "/health"
+                
+            res = requests.get(health_url, timeout=5.0)
+            if res.status_code != 200:
+                engine_status = f"HTTP Error {res.status_code}: {res.text}"
+        except Exception as e:
+            error_str = str(e)
+            if "ModelWrapper" in error_str or "untagged enum" in error_str:
+                engine_status = "ModelWrapper Parse Error"
+            else:
+                engine_status = f"Connection failed: {error_str}"
+    else:
+        engine_status = "Disabled (THERAPY_ENGINE_URL not set)"
+
+    overall_status = "ok" if (db_status == "ok" and groq_status == "ok" and engine_status == "ok") else "error"
+    
+    if overall_status == "error":
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": overall_status,
+                "db_status": db_status,
+                "groq_status": groq_status,
+                "engine_status": engine_status
+            }
+        )
+    return {
+        "status": overall_status,
+        "db_status": db_status,
+        "groq_status": groq_status,
+        "engine_status": engine_status
+    }
 
 @app.post("/api/auth/validate-password")
 def check_password_strength(data: PasswordCheck):
@@ -794,6 +926,18 @@ def hybrid_ai_router(messages, current_phase: str, path: str = None, response_fo
     # 1. Casual path only routes to Groq for speed and cost efficiency
     if path == "casual":
         logger.info("Hybrid AI Router: Casual path, routing to Groq only...")
+        return safe_groq_completion(
+            messages=messages,
+            temperature=0.6,
+            top_p=0.95,
+            response_format=response_format,
+            client_type="groq"
+        )
+
+    # 1b. Only route to RunPod Engine if phase is 'intervention' or 'emotional_processing'
+    # Otherwise, route to Groq only for speed, cost efficiency, and lower latency
+    if current_phase not in ["intervention", "emotional_processing"]:
+        logger.info(f"Hybrid AI Router: Phase '{current_phase}' is simple/conversational, routing to Groq only...")
         return safe_groq_completion(
             messages=messages,
             temperature=0.6,
@@ -2716,6 +2860,47 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
         db.refresh(new_plan)
         return {"status": "created", "plan_id": new_plan.id}
 
+def runpod_heartbeat_worker():
+    """Background worker that pings the RunPod engine every 5 minutes to prevent cold starts."""
+    logger.info("Starting RunPod engine heartbeat/warm-up worker...")
+    while not shutdown_event.is_set():
+        # Sleep for 5 minutes (300 seconds), but check shutdown_event periodically (every 5 seconds) to allow clean exit
+        for _ in range(60):
+            if shutdown_event.is_set():
+                break
+            time.sleep(5)
+            
+        if shutdown_event.is_set():
+            break
+            
+        # Perform the heartbeat ping if the circuit is not broken
+        with _circuit_breaker_lock:
+            circuit_broken = engine_circuit_broken and time.time() < engine_circuit_broken_until
+            
+        if not circuit_broken:
+            try:
+                logger.info("Sending heartbeat ping to RunPod engine...")
+                # Run a small completion request with a short timeout to keep it warm
+                safe_groq_completion(
+                    messages=[{"role": "user", "content": "ping"}],
+                    temperature=0.1,
+                    top_p=0.9,
+                    client_type="engine"
+                )
+                logger.info("Heartbeat ping to RunPod engine completed successfully.")
+            except Exception as e:
+                logger.warning(f"RunPod engine heartbeat ping failed: {e}")
+        else:
+            logger.info("Heartbeat ping skipped because RunPod circuit breaker is currently tripped.")
+
+@app.on_event("startup")
+def startup_event():
+    # Start the RunPod heartbeat worker thread
+    heartbeat_thread = threading.Thread(target=runpod_heartbeat_worker, daemon=True)
+    heartbeat_thread.start()
+    logger.info("RunPod engine heartbeat worker thread started.")
+
 if __name__ == "__main__":
+    initialize_services()
     logger.info(f"Starting Donna AI Backend | Schema: {CURRENT_SCHEMA_VERSION} | Shutdown handlers: registered")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

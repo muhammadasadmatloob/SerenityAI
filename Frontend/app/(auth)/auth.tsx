@@ -21,6 +21,34 @@ export default function AuthScreen() {
       Alert.alert("Missing fields", "Please fill all fields");
       return;
     }
+
+    if (!isLogin) {
+      if (password !== confirmPassword) {
+        Alert.alert("Mismatch", "Passwords do not match");
+        return;
+      }
+      if (password.length < 8) {
+        Alert.alert("Weak Password", "Password must be at least 8 characters long.");
+        return;
+      }
+      if (!/[A-Z]/.test(password)) {
+        Alert.alert("Weak Password", "Password must contain at least one uppercase letter (A-Z).");
+        return;
+      }
+      if (!/[a-z]/.test(password)) {
+        Alert.alert("Weak Password", "Password must contain at least one lowercase letter (a-z).");
+        return;
+      }
+      if (!/\d/.test(password)) {
+        Alert.alert("Weak Password", "Password must contain at least one number (0-9).");
+        return;
+      }
+      if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+        Alert.alert("Weak Password", "Password must contain at least one special character (e.g., !, @, #, $, %, &, *).");
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       if (isLogin) {

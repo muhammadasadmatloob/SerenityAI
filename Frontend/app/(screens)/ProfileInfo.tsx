@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
+import React, { useEffect, useState, useRef } from "react";
+import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ChevronLeft, MapPin, Calendar, Mail, Fingerprint } from "lucide-react-native";
 import { useRouter } from "expo-router";
@@ -12,6 +12,7 @@ export default function ProfileInfoScreen() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [data, setData] = useState<any>({});
+  const scrollRef = useRef<ScrollView>(null);
 
   const loadData = async () => {
     try {
@@ -29,6 +30,13 @@ export default function ProfileInfoScreen() {
   };
 
   useEffect(() => { loadData(); }, []);
+
+  // Auto-scroll to the focused input so it stays visible above the keyboard
+  const handleInputFocus = (yOffset: number) => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: yOffset - 120, animated: true });
+    }, 300);
+  };
 
   const handleSave = async () => {
     if (!data.name || !data.eName || !data.ePhone) {
@@ -65,6 +73,7 @@ export default function ProfileInfoScreen() {
                     { name: data.eName, phone: data.ePhone }
                 );
             }
+            Keyboard.dismiss();
             Alert.alert("Success", "Profile information updated.");
         } else {
             const errJson = await res.json();
@@ -79,10 +88,24 @@ export default function ProfileInfoScreen() {
 
   if (loading) return <View className="flex-1 justify-center bg-[#F8FAFC]"><ActivityIndicator size="large" color="#808CEA" /></View>;
 
+  // Track Y positions for auto-scroll
+  let nameY = 0;
+  let eNameY = 0;
+  let ePhoneY = 0;
+
   return (
-    <SafeAreaView className="flex-1 bg-white px-8">
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} className="flex-1">
-        <ScrollView contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"} 
+        className="flex-1"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView 
+          ref={scrollRef}
+          contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: 200 }} 
+          showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
+        >
           <TouchableOpacity onPress={() => router.back()} className="mb-6 mt-4">
               <ChevronLeft size={30} color="black" />
           </TouchableOpacity>
@@ -103,24 +126,32 @@ export default function ProfileInfoScreen() {
 
           {/* --- EDITABLE SECTION --- */}
           <Text className="font-bold mb-2 text-gray-700 ml-1">Display Name</Text>
-          <TextInput 
-              value={data.name} 
-              onChangeText={(t) => setData({...data, name: t})} 
-              className="bg-white p-5 rounded-2xl mb-6 border border-gray-100 shadow-sm text-gray-800" 
-          />
+          <View onLayout={(e) => { nameY = e.nativeEvent.layout.y; }}>
+            <TextInput 
+                value={data.name} 
+                onChangeText={(t) => setData({...data, name: t})} 
+                onFocus={() => handleInputFocus(nameY)}
+                className="bg-white p-5 rounded-2xl mb-6 border border-gray-100 shadow-sm text-gray-800" 
+            />
+          </View>
 
-          <View className="bg-[#808CEA]/5 p-6 rounded-3xl mb-8 border border-[#808CEA]/10">
+          <View 
+            className="bg-[#808CEA]/5 p-6 rounded-3xl mb-8 border border-[#808CEA]/10"
+            onLayout={(e) => { eNameY = e.nativeEvent.layout.y; }}
+          >
               <Text className="font-bold mb-4 text-[#4A55A2]">Emergency Contact</Text>
               <TextInput 
                   placeholder="Contact Person Name" 
                   value={data.eName} 
                   onChangeText={(t) => setData({...data, eName: t})} 
+                  onFocus={() => handleInputFocus(eNameY)}
                   className="bg-white p-4 rounded-xl mb-3 border border-gray-100 text-gray-800" 
               />
               <TextInput 
-                  placeholder="Emergency Phone" 
+                  placeholder="Emergency Phone (e.g. +923331234567)" 
                   value={data.ePhone} 
                   onChangeText={(t) => setData({...data, ePhone: t})} 
+                  onFocus={() => handleInputFocus(eNameY + 80)}
                   keyboardType="phone-pad" 
                   className="bg-white p-4 rounded-xl border border-gray-100 text-gray-800" 
               />
@@ -149,4 +180,4 @@ const InfoRow = ({ icon, label, value }: any) => (
             <Text className="text-gray-600 font-medium" numberOfLines={1}>{value}</Text>
         </View>
     </View>
-);
+);

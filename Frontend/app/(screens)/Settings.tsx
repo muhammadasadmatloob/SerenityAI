@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ChevronLeft } from "lucide-react-native";
+import { ChevronLeft, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth } from "../../firebase/firebase";
@@ -10,10 +10,18 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [oldPass, setOldPass] = useState("");
   const [newPass, setNewPass] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const handleUpdate = async () => {
-    if (!oldPass || !newPass) return Alert.alert("Required", "Fill both fields.");
+    if (!oldPass || !newPass || !confirmPass) return Alert.alert("Required", "Please fill all fields.");
+    if (newPass.length < 6) return Alert.alert("Weak Password", "New password must be at least 6 characters.");
+    if (newPass !== confirmPass) return Alert.alert("Mismatch", "New password and confirm password do not match.");
+    if (oldPass === newPass) return Alert.alert("Same Password", "New password must be different from old password.");
+
     setLoading(true);
     try {
       const user = auth.currentUser;
@@ -21,33 +29,111 @@ export default function SettingsScreen() {
         const cred = EmailAuthProvider.credential(user.email, oldPass);
         await reauthenticateWithCredential(user, cred);
         await updatePassword(user, newPass);
+        Keyboard.dismiss();
         Alert.alert("Success", "Password changed successfully.");
+        setOldPass("");
+        setNewPass("");
+        setConfirmPass("");
         router.back();
       }
     } catch (e: any) {
-      Alert.alert("Error", "Authentication failed. Check your old password.");
+      const msg = e?.code === "auth/wrong-password" || e?.code === "auth/invalid-credential"
+        ? "Old password is incorrect. Please try again."
+        : e?.message || "Authentication failed.";
+      Alert.alert("Error", msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white px-8">
-      <TouchableOpacity onPress={() => router.back()} className="mb-6 mt-4">
-        <ChevronLeft size={30} color="black" />
-      </TouchableOpacity>
-      
-      <Text className="text-3xl font-bold mb-8">Security Settings</Text>
+    <SafeAreaView className="flex-1 bg-white">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        className="flex-1"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: 200 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <TouchableOpacity onPress={() => router.back()} className="mb-6 mt-4">
+            <ChevronLeft size={30} color="black" />
+          </TouchableOpacity>
 
-      <Text className="font-bold mb-2">Verify Old Password</Text>
-      <TextInput placeholder="••••••••" secureTextEntry value={oldPass} onChangeText={setOldPass} className="border border-gray-200 p-4 rounded-xl mb-6" />
+          <View className="flex-row items-center mb-2">
+            <ShieldCheck size={28} color="#808CEA" />
+            <Text className="text-3xl font-bold ml-3 text-gray-800">Security</Text>
+          </View>
+          <Text className="text-gray-400 mb-8">Update your account password</Text>
 
-      <Text className="font-bold mb-2">New Password</Text>
-      <TextInput placeholder="••••••••" secureTextEntry value={newPass} onChangeText={setNewPass} className="border border-gray-200 p-4 rounded-xl mb-10" />
+          {/* Old Password */}
+          <Text className="font-bold mb-2 text-gray-700 ml-1">Current Password</Text>
+          <View className="flex-row items-center border border-gray-200 rounded-xl mb-6 bg-white">
+            <View className="pl-4 pr-2">
+              <Lock size={18} color="#94A3B8" />
+            </View>
+            <TextInput
+              placeholder="Enter current password"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showOld}
+              value={oldPass}
+              onChangeText={setOldPass}
+              style={{ flex: 1, padding: 16, fontSize: 16, color: "#1F2937" }}
+            />
+            <TouchableOpacity onPress={() => setShowOld(!showOld)} className="pr-4">
+              {showOld ? <Eye size={20} color="#808CEA" /> : <EyeOff size={20} color="#94A3B8" />}
+            </TouchableOpacity>
+          </View>
 
-      <TouchableOpacity onPress={handleUpdate} className="bg-black p-5 rounded-full items-center shadow-lg">
-        {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Change Password</Text>}
-      </TouchableOpacity>
+          {/* New Password */}
+          <Text className="font-bold mb-2 text-gray-700 ml-1">New Password</Text>
+          <View className="flex-row items-center border border-gray-200 rounded-xl mb-6 bg-white">
+            <View className="pl-4 pr-2">
+              <Lock size={18} color="#94A3B8" />
+            </View>
+            <TextInput
+              placeholder="Enter new password (min 6 chars)"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showNew}
+              value={newPass}
+              onChangeText={setNewPass}
+              style={{ flex: 1, padding: 16, fontSize: 16, color: "#1F2937" }}
+            />
+            <TouchableOpacity onPress={() => setShowNew(!showNew)} className="pr-4">
+              {showNew ? <Eye size={20} color="#808CEA" /> : <EyeOff size={20} color="#94A3B8" />}
+            </TouchableOpacity>
+          </View>
+
+          {/* Confirm Password */}
+          <Text className="font-bold mb-2 text-gray-700 ml-1">Confirm New Password</Text>
+          <View className="flex-row items-center border border-gray-200 rounded-xl mb-10 bg-white">
+            <View className="pl-4 pr-2">
+              <Lock size={18} color="#94A3B8" />
+            </View>
+            <TextInput
+              placeholder="Re-enter new password"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showConfirm}
+              value={confirmPass}
+              onChangeText={setConfirmPass}
+              style={{ flex: 1, padding: 16, fontSize: 16, color: "#1F2937" }}
+            />
+            <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} className="pr-4">
+              {showConfirm ? <Eye size={20} color="#808CEA" /> : <EyeOff size={20} color="#94A3B8" />}
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            onPress={handleUpdate}
+            disabled={loading}
+            className="bg-[#808CEA] p-5 rounded-full items-center shadow-lg shadow-[#808CEA]/30"
+          >
+            {loading ? <ActivityIndicator color="white" /> : <Text className="text-white font-bold text-lg">Change Password</Text>}
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
-}
+}

@@ -71,7 +71,7 @@ def load_vllm_engine_and_tokenizer(model_dir: str, engine_args: Any = None) -> T
     
     # Try loading tokenizer
     try:
-        from transformers import AutoTokenizer
+        from transformers import AutoTokenizer  # type: ignore
         logger.info("Loading Tokenizer via AutoTokenizer...")
         tokenizer = AutoTokenizer.from_pretrained(model_dir)
         logger.info("Tokenizer loaded successfully.")
@@ -82,10 +82,10 @@ def load_vllm_engine_and_tokenizer(model_dir: str, engine_args: Any = None) -> T
         
     # Try loading vLLM engine
     try:
-        from vllm.engine.llm_engine import LLMEngine
+        from vllm.engine.llm_engine import LLMEngine  # type: ignore
         logger.info("Initializing LLMEngine...")
         if engine_args is None:
-            from vllm.engine.arg_utils import EngineArgs
+            from vllm.engine.arg_utils import EngineArgs  # type: ignore
             engine_args = EngineArgs(model=model_dir)
             
         engine = LLMEngine.from_engine_args(engine_args)

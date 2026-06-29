@@ -13,8 +13,10 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Keyboard
+  Keyboard,
+  Modal
 } from "react-native";
+import { WebView } from "react-native-webview";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config"; 
@@ -36,6 +38,7 @@ export default function InfoScreen() {
   const [ePhone, setEPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [showMapModal, setShowMapModal] = useState(false);
 
   // Auto-scroll to inputs on focus
   const handleInputFocus = (yOffset: number) => {
@@ -90,6 +93,40 @@ export default function InfoScreen() {
       Alert.alert("Location Error", "We couldn't retrieve your location. Make sure GPS is enabled.");
     } finally {
       setLocating(false);
+    }
+  };
+
+  const onMapMessage = async (event: any) => {
+    try {
+      const coords = JSON.parse(event.nativeEvent.data);
+      if (coords.latitude && coords.longitude) {
+        setLocation({
+          latitude: coords.latitude,
+          longitude: coords.longitude
+        });
+        
+        const geocode = await Location.reverseGeocodeAsync({
+          latitude: coords.latitude,
+          longitude: coords.longitude
+        });
+
+        if (geocode && geocode.length > 0) {
+          const addr = geocode[0];
+          const parts = [
+            addr.name,
+            addr.street,
+            addr.district,
+            addr.city,
+            addr.region,
+            addr.country,
+          ].filter(Boolean);
+          setAddress(parts.join(", "));
+        } else {
+          setAddress(`Lat: ${coords.latitude.toFixed(5)}, Lng: ${coords.longitude.toFixed(5)}`);
+        }
+      }
+    } catch (err) {
+      console.log("Error parsing coordinates:", err);
     }
   };
 
@@ -153,6 +190,62 @@ export default function InfoScreen() {
 
   let nameY = 0;
   let emergencyY = 0;
+
+  // Generate Leaflet Map HTML dynamically for WebView
+  const getMapHtml = () => {
+    const lat = location?.latitude || 33.6844;
+    const lng = location?.longitude || 73.0479;
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+          body, html, #map {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+          }
+        </style>
+      </head>
+      <body>
+        <div id="map"></div>
+        <script>
+          var lat = ${lat};
+          var lng = ${lng};
+          var map = L.map('map').setView([lat, lng], 16);
+          
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+          }).addTo(map);
+
+          var marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+
+          marker.on('dragend', function (e) {
+            var position = marker.getLatLng();
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              latitude: position.lat,
+              longitude: position.lng
+            }));
+          });
+
+          map.on('click', function (e) {
+            marker.setLatLng(e.latlng);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              latitude: e.latlng.lat,
+              longitude: e.latlng.lng
+            }));
+          });
+        </script>
+      </body>
+      </html>
+    `;
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-[#FBFBFF]">
@@ -236,7 +329,14 @@ export default function InfoScreen() {
                     style={{ width: "100%", height: 150, borderRadius: 16 }}
                     resizeMode="cover"
                   />
-                  <Text className="text-gray-700 text-sm mt-3 text-center px-2 font-medium">{address}</Text>
+                  <Text className="text-gray-700 text-sm mt-3 mb-4 text-center px-2 font-medium">{address}</Text>
+                  
+                  <TouchableOpacity
+                    onPress={() => setShowMapModal(true)}
+                    className="bg-[#808CEA] py-3 px-6 rounded-full items-center shadow-sm w-full"
+                  >
+                    <Text className="text-white font-bold">🗺 Adjust Location on Map</Text>
+                  </TouchableOpacity>
                 </View>
               )}
 
@@ -278,6 +378,42 @@ export default function InfoScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* --- INTERACTIVE LEAFLET ADJUSTMENT MAP MODAL --- */}
+      <Modal
+        visible={showMapModal}
+        animationType="slide"
+        onRequestClose={() => setShowMapModal(false)}
+      >
+        <SafeAreaView className="flex-1 bg-white">
+          <View className="flex-row justify-between items-center px-6 py-4 border-b border-gray-100">
+            <Text className="text-xl font-bold text-gray-800">Pin Your Location</Text>
+            <TouchableOpacity
+              onPress={() => setShowMapModal(false)}
+              className="bg-[#808CEA] py-2 px-5 rounded-full"
+            >
+              <Text className="text-white font-bold">Done</Text>
+            </TouchableOpacity>
+          </View>
+          <View className="flex-1">
+            {location && (
+              <WebView
+                originWhitelist={['*']}
+                source={{ html: getMapHtml() }}
+                onMessage={onMapMessage}
+                style={{ flex: 1 }}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+              />
+            )}
+          </View>
+          <View className="p-6 bg-slate-50 border-t border-gray-100">
+            <Text className="text-gray-400 text-xs font-bold uppercase mb-1">Adjusted Address Preview</Text>
+            <Text className="text-gray-700 text-sm font-medium leading-5">{address}</Text>
+            <Text className="text-[11px] text-gray-400 mt-2">💡 Drag the blue marker or tap anywhere on the map to pinpoint your exact home.</Text>
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }

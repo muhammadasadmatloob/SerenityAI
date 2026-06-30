@@ -144,6 +144,7 @@ export default function RootLayout() {
 
       if (authUser) {
         setUser(authUser);
+        setIsProfileComplete(null); // Force navigation guard to wait for DB snapshot
         // Trigger background cleanup of leftover sessions
         authUser.getIdToken().then((token) => {
           fetch(`${BACKEND_URL}/api/session/end-all-active`, {

@@ -198,7 +198,7 @@ export default function RootLayout() {
       // Allow splash to stay visible briefly for animation to complete
       const timer = setTimeout(() => {
         setShowCustomSplash(false);
-      }, 1300); // 800ms (moti delay) + 500ms buffer
+      }, 4000); // 4 seconds timeout as requested
       return () => clearTimeout(timer);
     }
   }, [isAppReady, networkError, showCustomSplash]);

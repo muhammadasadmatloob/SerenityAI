@@ -1766,10 +1766,23 @@ def start_sess(
             email_val = f"unknown_{uid}@serenityai.com"
             name_val = "Friend"
         
-        user = User(firebase_uid=uid, email=email_val, name=name_val)
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        # Conflict Resolution: Check if email already exists (User recreated Firebase account)
+        existing_email_user = db.query(User).filter_by(email=email_val).first()
+        if existing_email_user:
+            logger.info(f"Re-linking existing email {email_val} to new Firebase UID {uid}")
+            existing_email_user.firebase_uid = uid
+            db.commit()
+            user = existing_email_user
+        else:
+            try:
+                user = User(firebase_uid=uid, email=email_val, name=name_val)
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Race condition during user creation: {e}")
+                user = db.query(User).filter_by(firebase_uid=uid).first()
     
     # Resolve and store path
     path_to_use = None
@@ -2632,12 +2645,24 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
     if not user:
         try:
             f_user = auth.get_user(uid)
-            user = User(firebase_uid=uid, email=f_user.email or f"unknown_{uid}@serenityai.com")
-            db.add(user)
+            email_val = f_user.email or f"unknown_{uid}@serenityai.com"
         except Exception as auth_e:
             logger.error(f"Firebase auth lookup failed in sync_info: {auth_e}")
-            user = User(firebase_uid=uid, email=f"unknown_{uid}@serenityai.com")
-            db.add(user)
+            email_val = f"unknown_{uid}@serenityai.com"
+
+        existing_email_user = db.query(User).filter_by(email=email_val).first()
+        if existing_email_user:
+            existing_email_user.firebase_uid = uid
+            db.commit()
+            user = existing_email_user
+        else:
+            try:
+                user = User(firebase_uid=uid, email=email_val)
+                db.add(user)
+                db.commit()
+            except Exception:
+                db.rollback()
+                user = db.query(User).filter_by(firebase_uid=uid).first()
     
     user.name = data.name
     try:

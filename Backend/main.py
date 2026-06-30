@@ -54,6 +54,7 @@ THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
 ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME")
 SESSION_TIMEOUT_SECONDS = 1800
+global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
 if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY missing in .env")
@@ -470,7 +471,7 @@ def health_check(db: Session = Depends(get_db)):
     else:
         engine_status = "Disabled (THERAPY_ENGINE_URL not set)"
 
-    overall_status = "ok" if (db_status == "ok" and groq_status == "ok" and engine_status == "ok") else "error"
+    overall_status = "ok" if db_status == "ok" else "error"
     
     if overall_status == "error":
         return JSONResponse(
@@ -990,74 +991,52 @@ def hybrid_ai_router(messages, current_phase: str, path: str = None, response_fo
     # 2. For therapeutic phases, concurrently run Groq and the RunPod Fine-Tuned Engine
     logger.info(f"Hybrid AI Router: Starting concurrent blend of Groq + RunPod Fine-Tuned Engine (Phase: '{current_phase}')...")
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        # Submit tasks in parallel
-        future_groq = executor.submit(
-            safe_groq_completion,
-            messages=messages,
-            temperature=0.6,
-            top_p=0.95,
-            response_format=response_format,
-            client_type="groq"
-        )
-        future_engine = executor.submit(
-            safe_groq_completion,
-            messages=messages,
-            temperature=0.6,
-            top_p=0.95,
-            client_type="engine"
-        )
-        
-        res_groq = None
-        res_engine = None
-        
-        # We enforce a timeout on the queries to avoid hanging. Groq has a 10s timeout,
-        # but the RunPod engine has a 90s timeout to allow for cold start initialization.
-        try:
-            res_groq = future_groq.result(timeout=10.0)
-        except Exception as e:
-            logger.error(f"Groq parallel call failed: {e}")
-            
-        try:
-            res_engine = future_engine.result(timeout=90.0)
-        except Exception as e:
-            logger.error(f"RunPod Engine parallel call failed/timed out after 90s: {e}")
+    future_groq = global_ai_executor.submit(
+        safe_groq_completion,
+        messages=messages,
+        temperature=0.6,
+        top_p=0.95,
+        response_format=response_format,
+        client_type="groq"
+    )
+    future_engine = global_ai_executor.submit(
+        safe_groq_completion,
+        messages=messages,
+        temperature=0.6,
+        top_p=0.95,
+        response_format=response_format,
+        client_type="engine"
+    )
 
-    # Case 1: Both succeeded - merge their replies
+    # Wait a maximum of 7 seconds for both to complete
+    done, not_done = concurrent.futures.wait(
+        [future_groq, future_engine],
+        timeout=7.0,
+        return_when=concurrent.futures.ALL_COMPLETED
+    )
+
+    res_groq = future_groq.result() if future_groq in done and not future_groq.exception() else None
+    res_engine = future_engine.result() if future_engine in done and not future_engine.exception() else None
+
+    # Case 1: Both finished fast enough - merge them
     if res_groq and res_engine:
-        try:
-            parsed_groq = parse_llm_response(res_groq.choices[0].message.content or "")
-            parsed_engine = parse_llm_response(res_engine.choices[0].message.content or "")
-            
-            groq_text = parsed_groq.get("therapeutic_response", "").strip()
-            engine_text = parsed_engine.get("therapeutic_response", "").strip()
-            
-            # Combine the two responses
-            if groq_text and engine_text:
-                merged_text = f"{groq_text} {engine_text}"
-            else:
-                merged_text = engine_text or groq_text
-                
-            parsed_groq["therapeutic_response"] = merged_text
-            res_groq.choices[0].message.content = json.dumps(parsed_groq)
-            logger.info("Hybrid AI Router: Successfully blended Groq and RunPod responses.")
-            return res_groq
-        except Exception as e:
-            logger.error(f"Failed to merge parallel responses: {e}. Defaulting to Groq response.")
-            return res_groq
-
-    # Case 2: Only Groq succeeded (normal fallback)
-    if res_groq:
-        logger.info("Hybrid AI Router: RunPod Engine failed/timed out. Returning Groq response only.")
+        parsed_groq = parse_llm_response(res_groq.choices[0].message.content or "")
+        parsed_engine = parse_llm_response(res_engine.choices[0].message.content or "")
+        groq_text = parsed_groq.get("therapeutic_response", "").strip()
+        engine_text = parsed_engine.get("therapeutic_response", "").strip()
+        parsed_groq["therapeutic_response"] = f"{groq_text} {engine_text}" if groq_text and engine_text else (engine_text or groq_text)
+        res_groq.choices[0].message.content = json.dumps(parsed_groq)
         return res_groq
 
-    # Case 3: Only Engine succeeded
+    # Case 2: RunPod is cold starting (taking > 7s). Return Groq instantly so user doesn't wait!
+    if res_groq:
+        logger.info("Hybrid AI Router: RunPod is still loading. Returning Groq instantly.")
+        return res_groq
+
     if res_engine:
-        logger.info("Hybrid AI Router: Groq failed. Returning parsed RunPod Engine response.")
         return res_engine
 
-    # Case 4: Both failed - fallback to a synchronous Groq query
-    logger.warning("Hybrid AI Router: Both parallel calls failed. Retrying with synchronous Groq...")
+    # Fallback if both fail
     return safe_groq_completion(
         messages=messages,
         temperature=0.6,
@@ -1768,56 +1747,6 @@ def update_session_summary_task(session_id: int, uid: str):
         db.close()
         _unregister_task()
 
-def background_session_warmup_processor(future_llm, session_id_val: int, uid: str, user_msg_id: Optional[int]):
-    """Background task to wait for the timed-out LLM startup call, check for crisis events, and run the pipeline."""
-    from database import SessionLocal
-    db = SessionLocal()
-    try:
-        logger.info(f"⏳ Background Session Warm-up Processor: Awaiting LLM response for session {session_id_val}...")
-        # Await the completion of the future (no timeout)
-        res = future_llm.result()
-        raw_reply = res.choices[0].message.content or ""
-        parsed_data = parse_llm_response(raw_reply)
-        
-        # Urgency/Crisis check from LLM output
-        risk_info = parsed_data.get("risk_analysis", {})
-        urgency = int(risk_info.get("urgency_score", 1))
-        
-        has_crisis = False
-        crisis_details_val = ""
-        action_taken_val = ""
-        
-        if risk_info.get("suicide_risk") is True or risk_info.get("self_harm") is True or risk_info.get("crisis") is True:
-            has_crisis = True
-            crisis_details_val = risk_info.get("risk_details", "LLM-detected suicide/self-harm risk")
-            action_taken_val = "Safety override triggered in background."
-        elif risk_info.get("violence") is True or risk_info.get("abuse") is True or risk_info.get("domestic_violence") is True:
-            has_crisis = True
-            crisis_details_val = risk_info.get("risk_details", "LLM-detected violence/abuse/domestic boundary breach")
-            action_taken_val = "Violence boundary override in background."
-            
-        if has_crisis:
-            logger.warning(f"⚠️ Crisis detected in background for session {session_id_val}. Saving CrisisEvent...")
-            crisis_event = CrisisEvent(
-                session_id=session_id_val,
-                user_uid=uid,
-                trigger_message_id=user_msg_id,
-                urgency_score=urgency,
-                crisis_details=crisis_details_val,
-                action_taken=action_taken_val
-            )
-            db.add(crisis_event)
-            db.commit()
-            
-        # Run background pipeline therapeutic analysis
-        if user_msg_id is not None:
-            logger.info(f"🚀 Running background therapeutic pipeline for session {session_id_val}...")
-            run_background_pipeline(session_id_val, uid, user_msg_id, parsed_data)
-            
-    except Exception as e:
-        logger.error(f"Error in background_session_warmup_processor: {e}")
-    finally:
-        db.close()
 
 @app.post("/api/session/start")
 def start_sess(
@@ -1941,81 +1870,56 @@ def start_sess(
         messages.append({"role": "user", "content": f"Hello Donna, I am feeling {mood_str}."})
     
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as start_executor:
-            future_llm = start_executor.submit(
-                hybrid_ai_router,
-                messages=messages,
-                current_phase="rapport_building",
-                path=path_to_use,
-                response_format={"type": "json_object"}
+        res = hybrid_ai_router(
+            messages=messages,
+            current_phase="rapport_building",
+            path=path_to_use,
+            response_format={"type": "json_object"}
+        )
+        
+        # If successful, parse it normally as before
+        raw_reply = res.choices[0].message.content or ""
+        parsed_data = parse_llm_response(raw_reply)
+        
+        # Urgency/Crisis check from LLM output
+        risk_info = parsed_data.get("risk_analysis", {})
+        urgency = int(risk_info.get("urgency_score", 1))
+        
+        if risk_info.get("suicide_risk") is True or risk_info.get("self_harm") is True or risk_info.get("crisis") is True:
+            crisis_event = CrisisEvent(
+                session_id=session_id_val,
+                user_uid=uid,
+                trigger_message_id=user_msg_id,
+                urgency_score=urgency,
+                crisis_details=risk_info.get("risk_details", "LLM-detected suicide/self-harm risk"),
+                action_taken="Safety override triggered."
             )
-            try:
-                # Wait for 5 seconds for the LLM response
-                res = future_llm.result(timeout=5.0)
-                
-                # If successful, parse it normally as before
-                raw_reply = res.choices[0].message.content or ""
-                parsed_data = parse_llm_response(raw_reply)
-                
-                # Urgency/Crisis check from LLM output
-                risk_info = parsed_data.get("risk_analysis", {})
-                urgency = int(risk_info.get("urgency_score", 1))
-                
-                if risk_info.get("suicide_risk") is True or risk_info.get("self_harm") is True or risk_info.get("crisis") is True:
-                    crisis_event = CrisisEvent(
-                        session_id=session_id_val,
-                        user_uid=uid,
-                        trigger_message_id=user_msg_id,
-                        urgency_score=urgency,
-                        crisis_details=risk_info.get("risk_details", "LLM-detected suicide/self-harm risk"),
-                        action_taken="Safety override triggered."
-                    )
-                    db.add(crisis_event)
-                    ai_msg_text = CRISIS_RESPONSE
-                elif risk_info.get("violence") is True or risk_info.get("abuse") is True or risk_info.get("domestic_violence") is True:
-                    crisis_event = CrisisEvent(
-                        session_id=session_id_val,
-                        user_uid=uid,
-                        trigger_message_id=user_msg_id,
-                        urgency_score=urgency,
-                        crisis_details=risk_info.get("risk_details", "LLM-detected violence/abuse/domestic boundary breach"),
-                        action_taken="Violence boundary override"
-                    )
-                    db.add(crisis_event)
-                    ai_msg_text = BOUNDARY_RESPONSE
-                else:
-                    ai_msg_text = parsed_data.get("therapeutic_response", "I'm here for you. How can we start today?")
-                
-                # Save AI reply
-                ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(ai_msg_text))
-                db.add(ai_msg)
-                db.commit()
-                
-                # Save MessageAnalysis & trigger pipeline updates in background
-                if user_msg_id is not None:
-                    background_tasks.add_task(run_background_pipeline, session_id_val, uid, user_msg_id, parsed_data)
-                    
-                return {"session_id": session_id_val, "first_message": ai_msg_text}
-                
-            except concurrent.futures.TimeoutError:
-                logger.info("start_sess: LLM response timed out (>5s). Triggering warm-up message and background analysis.")
-                
-                # Determine warm-up message based on mood
-                mood_str = data.mood.strip().lower()
-                if mood_str and mood_str != "neutral":
-                    ai_msg_text = f"I'm here for you. I see you marked that you're feeling {mood_str} today. What is on your mind?"
-                else:
-                    ai_msg_text = "I'm here for you. How can we start today?"
-                    
-                # Save AI warm-up reply to database
-                ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(ai_msg_text))
-                db.add(ai_msg)
-                db.commit()
-                
-                # Delegate the future result processing and pipeline analysis to a background task
-                background_tasks.add_task(background_session_warmup_processor, future_llm, session_id_val, uid, user_msg_id)
-                
-                return {"session_id": session_id_val, "first_message": ai_msg_text}
+            db.add(crisis_event)
+            ai_msg_text = CRISIS_RESPONSE
+        elif risk_info.get("violence") is True or risk_info.get("abuse") is True or risk_info.get("domestic_violence") is True:
+            crisis_event = CrisisEvent(
+                session_id=session_id_val,
+                user_uid=uid,
+                trigger_message_id=user_msg_id,
+                urgency_score=urgency,
+                crisis_details=risk_info.get("risk_details", "LLM-detected violence/abuse/domestic boundary breach"),
+                action_taken="Violence boundary override"
+            )
+            db.add(crisis_event)
+            ai_msg_text = BOUNDARY_RESPONSE
+        else:
+            ai_msg_text = parsed_data.get("therapeutic_response", "I'm here for you. How can we start today?")
+        
+        # Save AI reply
+        ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(ai_msg_text))
+        db.add(ai_msg)
+        db.commit()
+        
+        # Save MessageAnalysis & trigger pipeline updates in background
+        if user_msg_id is not None:
+            background_tasks.add_task(run_background_pipeline, session_id_val, uid, user_msg_id, parsed_data)
+            
+        return {"session_id": session_id_val, "first_message": ai_msg_text}
                 
     except Exception as e:
         logger.error(f"Error in start_sess during LLM fetch: {e}")

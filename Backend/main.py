@@ -1759,12 +1759,35 @@ def update_session_summary_task(session_id: int, uid: str):
         db.close()
         _unregister_task()
 
-def cascade_uid_update(db: Session, old_uid: str, new_uid: str):
-    """Safely migrate all user data from an old Firebase UID to a new one."""
+def resolve_uid_conflict(db: Session, existing_email_user: User, new_uid: str, email_val: str) -> User:
+    """Safely migrate all user data from an old Firebase UID to a new one, avoiding ForeignKey constraints."""
+    old_uid = existing_email_user.firebase_uid
     if old_uid == new_uid:
-        return
-    logger.info(f"Cascading UID update from {old_uid} to {new_uid}")
+        return existing_email_user
+        
+    logger.info(f"Resolving UID conflict: Re-linking existing email {email_val} from old UID {old_uid} to new Firebase UID {new_uid}")
     
+    # 1. Free up the email on the old record
+    existing_email_user.email = f"old_{old_uid}_{email_val}"
+    db.commit()
+    
+    # 2. Create the new User row FIRST so FK constraints pass
+    new_user = User(
+        firebase_uid=new_uid, 
+        email=email_val, 
+        name=existing_email_user.name,
+        gender=existing_email_user.gender,
+        path=existing_email_user.path,
+        dob=existing_email_user.dob,
+        lat=existing_email_user.lat,
+        lng=existing_email_user.lng,
+        emergency_name=existing_email_user.emergency_name,
+        emergency_phone=existing_email_user.emergency_phone
+    )
+    db.add(new_user)
+    db.commit()
+    
+    # 3. Safely cascade the child records to the new UID
     db.query(UserSession).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
     db.query(SessionSummary).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
     db.query(TherapeuticIntervention).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
@@ -1775,6 +1798,13 @@ def cascade_uid_update(db: Session, old_uid: str, new_uid: str):
     db.query(CrisisEvent).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
     db.query(TreatmentPlan).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
     db.query(SemanticMemory).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.commit()
+    
+    # 4. Delete the old user record
+    db.delete(existing_email_user)
+    db.commit()
+    
+    return new_user
 
 
 @app.post("/api/session/start")
@@ -1798,13 +1828,7 @@ def start_sess(
         # Conflict Resolution: Check if email already exists
         existing_email_user = db.query(User).filter_by(email=email_val).first()
         if existing_email_user:
-            old_uid = existing_email_user.firebase_uid
-            if old_uid != uid:
-                logger.info(f"Re-linking existing email {email_val} to new Firebase UID {uid}")
-                cascade_uid_update(db, old_uid, uid)
-                existing_email_user.firebase_uid = uid
-                db.commit()
-            user = existing_email_user
+            user = resolve_uid_conflict(db, existing_email_user, uid, email_val)
         else:
             try:
                 user = User(firebase_uid=uid, email=email_val, name=name_val)
@@ -2684,12 +2708,7 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
 
         existing_email_user = db.query(User).filter_by(email=email_val).first()
         if existing_email_user:
-            old_uid = existing_email_user.firebase_uid
-            if old_uid != uid:
-                cascade_uid_update(db, old_uid, uid)
-                existing_email_user.firebase_uid = uid
-                db.commit()
-            user = existing_email_user
+            user = resolve_uid_conflict(db, existing_email_user, uid, email_val)
         else:
             try:
                 user = User(firebase_uid=uid, email=email_val)

@@ -2617,7 +2617,7 @@ def get_stats(uid: str = Depends(get_current_uid), db: Session = Depends(get_db)
         "last_mood": last.mood if last else "neutral",
         "eName": user.emergency_name if user else "Not Set",
         "ePhone": user.emergency_phone if user else "Not Set",
-        "dob": user.dob if user else "Not Set",
+        "dob": user.dob.isoformat() if (user and user.dob) else "Not Set",
         "gender": user.gender if (user and user.gender) else "Not Set",
         "lat": user.lat if user else 0.0,
         "lng": user.lng if user else 0.0,
@@ -2638,7 +2638,11 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
             db.add(user)
     
     user.name = data.name
-    user.dob = data.dob
+    try:
+        user.dob = datetime.datetime.fromisoformat(data.dob.replace("Z", "+00:00"))
+    except Exception as parse_e:
+        logger.error(f"Failed to parse dob timestamp {data.dob}: {parse_e}")
+        user.dob = None
     user.gender = data.gender
     user.lat = data.lat
     user.lng = data.lng

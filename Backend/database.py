@@ -37,7 +37,7 @@ class User(Base):
     firebase_uid = Column(String, unique=True, index=True)
     email = Column(String, unique=True)
     name = Column(String)
-    dob = Column(String, nullable=True)
+    dob = Column(DateTime, nullable=True)
     gender = Column(String, nullable=True)
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)

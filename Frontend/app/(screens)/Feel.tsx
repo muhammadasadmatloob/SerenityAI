@@ -20,7 +20,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
 import { Audio } from "expo-av";
-import { auth } from "../../firebase/firebase";
+import { auth, db } from "../../firebase/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { BACKEND_URL, checkInternetConnection } from "../../constants/config";
 
 const clearRecordingOptions = {
@@ -73,31 +74,45 @@ export default function FeelScreen() {
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
       if (user) {
+        // Dual fetch path: 1. Try Firestore first (instant)
+        try {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists() && userDoc.data()?.path) {
+            setUserPath(userDoc.data().path);
+          }
+        } catch (fsErr) {
+          console.log("Error checking user path in Firestore:", fsErr);
+        }
+
+        // 2. Fallback / Sync from stats endpoint
         try {
           const token = await user.getIdToken();
           const res = await fetch(`${BACKEND_URL}/api/profile/stats`, {
             headers: { Authorization: `Bearer ${token}` }
           });
-            if (res.ok) {
-              const json = await res.json();
-              if (json.path) {
-                setUserPath(json.path);
-              }
+          if (res.ok) {
+            const json = await res.json();
+            if (json.path) {
+              setUserPath(json.path);
             }
-          } catch (e) {
-            console.log("Error checking user path:", e);
           }
-
-          // Trigger background warm-up ping for RunPod model to reduce cold start latency
-          try {
-            fetch(`${BACKEND_URL}/api/session/warmup`, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${token}` }
-            }).catch((err) => console.log("⚠️ Feel: RunPod warm-up silent fail:", err));
-          } catch (err) {}
+        } catch (e) {
+          console.log("Error checking user path via stats API:", e);
         }
-      });
-      return unsubscribe;
+
+        // Trigger background warm-up ping for RunPod model to reduce cold start latency
+        try {
+          const token = await user.getIdToken();
+          fetch(`${BACKEND_URL}/api/session/warmup`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` }
+          }).catch((err) => console.log("⚠️ Feel: RunPod warm-up silent fail:", err));
+        } catch (err) {}
+      } else {
+        setUserPath(null);
+      }
+    });
+    return unsubscribe;
   }, []);
 
   const startRecording = async () => {

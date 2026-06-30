@@ -88,130 +88,88 @@ export default function RootLayout() {
 
   // 2. Backend URL Discovery & Auth listener initialization
   useEffect(() => {
-    let unsubAuth: (() => void) | null = null;
-    const messageTimer = setTimeout(() => {
-      setSplashMessage("Waking up Donna (this may take a minute)...");
-    }, 5000);
-
-    async function initializeApp() {
+    // 1. Check Network Connectivity immediately on mount
+    async function checkConnectivity() {
       try {
         const state = await Network.getNetworkStateAsync();
         if (!state.isConnected) {
-          console.log("❌ _layout: No internet connection detected on boot.");
-          clearTimeout(messageTimer);
           setNetworkError(true);
           setIsAppReady(true);
           SplashScreen.hideAsync();
-          return;
         }
       } catch (e) {
-        console.log("⚠️ _layout: Error checking network state:", e);
-        clearTimeout(messageTimer);
-        setNetworkError(true);
-        setIsAppReady(true);
-        SplashScreen.hideAsync();
-        return;
+        console.log("Error checking network status:", e);
       }
+    }
+    checkConnectivity();
 
-      setNetworkError(false);
-
+    // 2. Concurrently initiate background URL discovery & warmups (non-blocking)
+    async function discoverBackend() {
       try {
-        // Wait for the backend URL discovery to complete (allow up to 90s for cold start/subnet scan)
         await Promise.race([
           waitForBackendDiscovery(),
-          new Promise((resolve) => setTimeout(resolve, 90000))
+          new Promise((resolve) => setTimeout(resolve, 60000))
         ]);
-        console.log("🚀 _layout: Backend discovery completed/timed out, proceeding with verification.");
+        console.log("🚀 _layout: Backend discovery finished.");
+        
+        // Quietly ping backend to warm it up
+        fetch(`${BACKEND_URL}/`, { method: 'GET' }).catch(() => {});
       } catch (e) {
-        console.log("⚠️ _layout: Error during backend URL discovery:", e);
+        console.log("Backend discovery error:", e);
+      }
+    }
+    discoverBackend();
+
+    // 3. Register Auth Listener immediately to restore user session from AsyncStorage
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      // Clean up previous Firestore listener if user changes
+      if (unsubSnap.current) { 
+        unsubSnap.current(); 
+        unsubSnap.current = null; 
       }
 
-      // Verify backend is reachable and online before entering app flow
-      try {
-        const response = await fetch(`${BACKEND_URL}/`, {
-          method: 'GET',
-          headers: { 'Cache-Control': 'no-cache' }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          if (!data || !data.status || !data.status.toLowerCase().includes("donna")) {
-            console.log("❌ _layout: Backend returned invalid status response:", data);
-            clearTimeout(messageTimer);
-            setNetworkError(true);
-            setIsAppReady(true);
-            SplashScreen.hideAsync();
-            return;
+      if (user) {
+        // Trigger background cleanup of leftover sessions
+        user.getIdToken().then((token) => {
+          fetch(`${BACKEND_URL}/api/session/end-all-active`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` }
+          }).catch((err) => console.log("Failed to auto-end leftover sessions", err));
+        }).catch(() => {});
+
+        // Reload user to get the latest emailVerified status from Firebase
+        if (!user.emailVerified) {
+          try {
+            await user.reload();
+            user = auth.currentUser || user;
+          } catch (e) {
+            console.log("Failed to reload user verification status:", e);
           }
-        } else {
-          console.log("❌ _layout: Backend responded with non-OK status:", response.status);
-          clearTimeout(messageTimer);
-          setNetworkError(true);
+        }
+
+        // Listen to the user's document for real-time onboarding completion status
+        unsubSnap.current = onSnapshot(doc(db, "users", user.uid), (snap) => {
+          const data = snap.data();
+          const complete = !!(snap.exists() && data?.isOnboardingComplete === true);
+          setIsProfileComplete(complete);
           setIsAppReady(true);
           SplashScreen.hideAsync();
-          return;
-        }
-      } catch (err) {
-        console.log("❌ _layout: Failed to ping backend:", err);
-        clearTimeout(messageTimer);
-        setNetworkError(true);
-        setIsAppReady(true);
-        SplashScreen.hideAsync();
-        return;
-      }
-
-      // Backend is online, clear timer and restore default splash message
-      clearTimeout(messageTimer);
-      setSplashMessage("Your personal AI therapist");
-
-      unsubAuth = onAuthStateChanged(auth, (user) => {
-        // Clean up previous Firestore listener if user changes
-        if (unsubSnap.current) { 
-          unsubSnap.current(); 
-          unsubSnap.current = null; 
-        }
-
-        if (user) {
-          // Clean up any stale active sessions from a previous run to ensure a fresh startup session
-          user.getIdToken().then((token) => {
-            fetch(`${BACKEND_URL}/api/session/end-all-active`, {
-              method: "POST",
-              headers: { Authorization: `Bearer ${token}` }
-            }).catch((err) => console.log("Failed to auto-end leftover sessions", err));
-          });
-
-          // Listen to the user's document for real-time profile completion status
-          unsubSnap.current = onSnapshot(doc(db, "users", user.uid), (snap) => {
-            setIsProfileComplete(!!(snap.exists() && snap.data()?.name));
-            setIsAppReady(true);
-            SplashScreen.hideAsync();
-          }, async (error) => {
-            console.log("⚠️ _layout: onSnapshot error:", error);
-            try {
-              const state = await Network.getNetworkStateAsync();
-              if (!state.isConnected) {
-                setNetworkError(true);
-              } else {
-                setIsProfileComplete(false);
-              }
-            } catch (e) {
-              setIsProfileComplete(false);
-            }
-            setIsAppReady(true);
-            SplashScreen.hideAsync();
-          });
-        } else {
+        }, (error) => {
+          console.log("⚠️ _layout: onSnapshot error:", error);
+          // Fallback to false if document doesn't exist
           setIsProfileComplete(false);
           setIsAppReady(true);
           SplashScreen.hideAsync();
-        }
-      });
-    }
-
-    initializeApp();
+        });
+      } else {
+        setIsProfileComplete(false);
+        setIsAppReady(true);
+        SplashScreen.hideAsync();
+      }
+    });
 
     return () => { 
-      clearTimeout(messageTimer);
-      if (unsubAuth) (unsubAuth as () => void)(); 
+      unsubAuth();
       if (unsubSnap.current) unsubSnap.current(); 
     };
   }, [retryTrigger]);

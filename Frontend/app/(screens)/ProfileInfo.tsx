@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ChevronLeft, MapPin, Calendar, Mail, Fingerprint } from "lucide-react-native";
+import { ChevronLeft, MapPin, Calendar, Mail, Fingerprint, User } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
@@ -56,7 +56,7 @@ export default function ProfileInfoScreen() {
         const res = await fetch(`${BACKEND_URL}/api/profile/update`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ name: data.name, emergency_name: data.eName, emergency_phone: data.ePhone })
+            body: JSON.stringify({ name: data.name, gender: data.gender, emergency_name: data.eName, emergency_phone: data.ePhone })
         });
         
         if (res.ok) {
@@ -69,6 +69,7 @@ export default function ProfileInfoScreen() {
                     uid,
                     data.name,
                     birthDate,
+                    data.gender || "Not Set",
                     location,
                     { name: data.eName, phone: data.ePhone }
                 );
@@ -90,6 +91,7 @@ export default function ProfileInfoScreen() {
 
   // Track Y positions for auto-scroll
   let nameY = 0;
+  let genderY = 0;
   let eNameY = 0;
   let ePhoneY = 0;
 
@@ -117,6 +119,7 @@ export default function ProfileInfoScreen() {
               <InfoRow icon={<Fingerprint size={18} color="#94A3B8"/>} label="User ID" value={data.uid} />
               <InfoRow icon={<Mail size={18} color="#94A3B8"/>} label="Email Address" value={data.email} />
               <InfoRow icon={<Calendar size={18} color="#94A3B8"/>} label="Birth Date" value={data.dob?.split('T')[0] || "Not Set"} />
+              <InfoRow icon={<User size={18} color="#94A3B8"/>} label="Gender" value={data.gender || "Not Set"} />
               <InfoRow 
                   icon={<MapPin size={18} color="#94A3B8"/>} 
                   label="Last Synced Location" 
@@ -131,6 +134,17 @@ export default function ProfileInfoScreen() {
                 value={data.name} 
                 onChangeText={(t) => setData({...data, name: t})} 
                 onFocus={() => handleInputFocus(nameY)}
+                className="bg-white p-5 rounded-2xl mb-6 border border-gray-100 shadow-sm text-gray-800" 
+            />
+          </View>
+
+          <Text className="font-bold mb-2 text-gray-700 ml-1">Gender</Text>
+          <View onLayout={(e) => { genderY = e.nativeEvent.layout.y; }}>
+            <TextInput 
+                value={data.gender} 
+                placeholder="Enter gender (e.g. Male, Female, Other)"
+                onChangeText={(t) => setData({...data, gender: t})} 
+                onFocus={() => handleInputFocus(genderY)}
                 className="bg-white p-5 rounded-2xl mb-6 border border-gray-100 shadow-sm text-gray-800" 
             />
           </View>

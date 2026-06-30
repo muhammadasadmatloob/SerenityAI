@@ -29,6 +29,7 @@ export default function InfoScreen() {
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState(new Date(2000, 0, 1));
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [gender, setGender] = useState("");
   const [location, setLocation] = useState<{
     latitude: number;
     longitude: number;
@@ -131,8 +132,8 @@ export default function InfoScreen() {
   };
 
   const handleContinue = async () => {
-    if (!name || !eName || !ePhone || !location) {
-      Alert.alert("Almost there!", "All fields are required. Please enter your name, date of birth, sync location, and emergency contact details.");
+    if (!name || !gender || !eName || !ePhone || !location) {
+      Alert.alert("Almost there!", "All fields are required. Please enter your name, date of birth, gender, sync location, and emergency contact details.");
       return;
     }
 
@@ -161,6 +162,7 @@ export default function InfoScreen() {
         body: JSON.stringify({
           name: name,
           dob: birthDate.toISOString(),
+          gender: gender,
           lat: location.latitude,
           lng: location.longitude,
           eName: eName,
@@ -175,6 +177,7 @@ export default function InfoScreen() {
           user.uid,
           name,
           birthDate,
+          gender,
           { latitude: location.latitude, longitude: location.longitude },
           { name: eName, phone: ePhone }
         );
@@ -309,8 +312,34 @@ export default function InfoScreen() {
                 />
               )}
 
+              {/* Gender Field */}
+              <Text className="font-bold text-gray-700 ml-1 mb-2">3. Gender</Text>
+              <View className="flex-row justify-between mb-6">
+                {["Male", "Female", "Other"].map((g) => {
+                  const isSel = gender === g;
+                  return (
+                    <TouchableOpacity
+                      key={g}
+                      onPress={() => setGender(g)}
+                      style={{
+                        backgroundColor: isSel ? "#808CEA" : "#FFFFFF",
+                        borderColor: isSel ? "#808CEA" : "#E2E8F0",
+                        borderWidth: 1,
+                        paddingVertical: 16,
+                        borderRadius: 20,
+                        flex: 1,
+                        marginHorizontal: 4,
+                        alignItems: "center"
+                      }}
+                    >
+                      <Text style={{ color: isSel ? "#FFFFFF" : "#1F2937", fontWeight: "bold" }}>{g}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
               {/* Location Field */}
-              <Text className="font-bold text-gray-700 ml-1 mb-2">3. Current Location</Text>
+              <Text className="font-bold text-gray-700 ml-1 mb-2">4. Current Location</Text>
               <TouchableOpacity
                 onPress={handleGetLocation}
                 disabled={locating}
@@ -341,7 +370,7 @@ export default function InfoScreen() {
               )}
 
               {/* Emergency Contact Field */}
-              <Text className="font-bold text-gray-700 ml-1 mb-2">4. Emergency Contact Details</Text>
+              <Text className="font-bold text-gray-700 ml-1 mb-2">5. Emergency Contact Details</Text>
               <View 
                 className="bg-white p-6 rounded-[35px] border border-[#E2E8F0] mb-6"
                 onLayout={(e) => { emergencyY = e.nativeEvent.layout.y; }}

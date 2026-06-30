@@ -1,10 +1,11 @@
+import { sendEmailVerification } from "firebase/auth";
+import { loginWithEmail, signupWithEmail } from "../../firebase/firebaseConfig";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Eye, EyeOff } from "lucide-react-native";
 import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View, ActivityIndicator, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { loginWithEmail, signupWithEmail } from "../../firebase/firebaseConfig";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -52,11 +53,20 @@ export default function AuthScreen() {
     try {
       setLoading(true);
       if (isLogin) {
-        await loginWithEmail(email, password);
-        // Login handled by RootLayout guard (moves to Feel or Info)
+        const userCredential = await loginWithEmail(email, password);
+        const user = userCredential.user;
+        if (!user.emailVerified) {
+          try {
+            await sendEmailVerification(user);
+            Alert.alert("Verification Sent", "Your email is not verified. A new verification link has been sent to your inbox.");
+          } catch (resendErr) {
+            console.log("Auto-resend verification failed:", resendErr);
+          }
+          router.replace("/(screens)/EmailVerify");
+          return;
+        }
       } else {
         await signupWithEmail(email, password, confirmPassword);
-        // FORCE move to EmailVerify immediately after signup
         router.replace("/(screens)/EmailVerify");
       }
     } catch (err: any) {

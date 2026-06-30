@@ -44,6 +44,7 @@ export const saveUserInfo = async (
   uid: string, 
   name: string, 
   birthDate: Date, 
+  gender: string,
   location: { latitude: number, longitude: number } | null,
   emergencyContact: { name: string, phone: string }
 ) => {
@@ -52,9 +53,11 @@ export const saveUserInfo = async (
     uid,
     name,
     birthDate: birthDate.toISOString(),
+    gender,
     location,
-    emergencyContact, // Matches Firestore structure in your screenshot
+    emergencyContact,
     email: auth.currentUser?.email || "",
+    isOnboardingComplete: true,
     updatedAt: serverTimestamp(),
   }, { merge: true });
 };

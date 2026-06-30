@@ -6,7 +6,8 @@ import { StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndicator } fr
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
 import SupportCard from "../(components)/card";
-import { auth } from "../../firebase/firebase";
+import { auth, db } from "../../firebase/firebase";
+import { doc, setDoc } from "firebase/firestore";
 import { BACKEND_URL } from "../../constants/config";
 
 export default function PathScreen() {
@@ -26,6 +27,14 @@ export default function PathScreen() {
 
     setLoading(true);
     try {
+      // Save selected path in Firestore to persist
+      try {
+        const userRef = doc(db, "users", user.uid);
+        await setDoc(userRef, { path: selectedPath }, { merge: true });
+      } catch (fsErr) {
+        console.log("Error saving path to Firestore:", fsErr);
+      }
+
       const token = await user.getIdToken();
       const response = await fetch(`${BACKEND_URL}/api/session/start`, {
         method: "POST",

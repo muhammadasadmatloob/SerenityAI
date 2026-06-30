@@ -8,8 +8,9 @@ import { AnimatePresence, MotiText, MotiView } from "moti";
 import { useEffect, useState, useRef } from "react";
 import { Text, View, Dimensions, Image, StyleSheet, TouchableOpacity, LogBox } from "react-native";
 import * as Network from "expo-network";
+import * as SecureStore from "expo-secure-store";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { auth, db } from "../firebase/firebase"; 
+import { auth, db } from "../firebase/firebase";
 import { waitForBackendDiscovery, BACKEND_URL } from "../constants/config";
 import "../global.css";
 import TabBar from "./(components)/TabBar";
@@ -70,6 +71,7 @@ export default function RootLayout() {
   const [showCustomSplash, setShowCustomSplash] = useState(true);
   const [isAppReady, setIsAppReady] = useState(false);
   const [isProfileComplete, setIsProfileComplete] = useState<boolean | null>(null);
+  const [hasAcceptedPrivacy, setHasAcceptedPrivacy] = useState<boolean | null>(null);
   const [networkError, setNetworkError] = useState<boolean>(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const [splashMessage, setSplashMessage] = useState("Your personal AI therapist");
@@ -103,6 +105,17 @@ export default function RootLayout() {
       }
     }
     checkConnectivity();
+
+    // 1b. Check Privacy Status
+    async function checkPrivacy() {
+      try {
+        const val = await SecureStore.getItemAsync("HAS_ACCEPTED_PRIVACY");
+        setHasAcceptedPrivacy(val === "true");
+      } catch {
+        setHasAcceptedPrivacy(false);
+      }
+    }
+    checkPrivacy();
 
     // 2. Concurrently initiate background URL discovery & warmups (non-blocking)
     async function discoverBackend() {
@@ -197,13 +210,17 @@ export default function RootLayout() {
 
   // 3. Navigation Guard (The Traffic Controller)
   useEffect(() => {
-    if (!isAppReady || isProfileComplete === null || showCustomSplash || networkError) return;
+    if (!isAppReady || isProfileComplete === null || networkError || hasAcceptedPrivacy === null) return;
 
+    const currentScreen = segments[segments.length - 1];
     const inAuthGroup = segments[0] === "(auth)";
-    const onVerifyScreen = segments[segments.length - 1] === "EmailVerify";
-    const onInfoScreen = segments[segments.length - 1] === "Info";
+    const onVerifyScreen = currentScreen === "EmailVerify";
+    const onInfoScreen = currentScreen === "Info";
+    const onPrivacyScreen = currentScreen === "index" || segments.length === 0;
 
-    if (!user) {
+    if (!hasAcceptedPrivacy) {
+      if (!onPrivacyScreen) router.replace("/");
+    } else if (!user) {
       // Redirect to Auth if not logged in
       if (!inAuthGroup) router.replace("/(auth)/auth");
     } else if (!user.emailVerified) {
@@ -214,10 +231,10 @@ export default function RootLayout() {
       if (!onInfoScreen) router.replace("/(screens)/Info");
     } else if (isProfileComplete === true) {
       // Redirect to main app flow if coming from setup screens
-      const isOnSetupScreen = inAuthGroup || onVerifyScreen || onInfoScreen;
+      const isOnSetupScreen = inAuthGroup || onVerifyScreen || onInfoScreen || onPrivacyScreen;
       if (isOnSetupScreen) router.replace("/(screens)/Feel");
     }
-  }, [isAppReady, isProfileComplete, segments, showCustomSplash, networkError, user]);
+  }, [isAppReady, isProfileComplete, segments, networkError, user, hasAcceptedPrivacy]);
 
   if (!isAppReady) return null;
 

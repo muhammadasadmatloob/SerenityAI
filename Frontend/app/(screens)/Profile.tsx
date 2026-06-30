@@ -4,8 +4,9 @@ import React, { useState, useCallback } from "react";
 import { Alert, Image, Text, TouchableOpacity, View, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { BACKEND_URL } from "../../constants/config";
+import { ShieldCheck } from "lucide-react-native";
 
 const moodMap: Record<string, string> = {
   anxious: "😰",
@@ -84,6 +85,12 @@ export default function ProfileScreen() {
         <TouchableOpacity onPress={() => router.push("/(screens)/Settings")} style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }} className="flex-row items-center p-5 rounded-2xl mb-4 shadow-sm border border-gray-100">
           <Settings size={22} color="#4A55A2" />
           <Text className="flex-1 ml-4 font-semibold text-gray-700">Settings</Text>
+          <ChevronRight size={20} color="#CCC" />
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => router.push("/(screens)/Privacy?viewOnly=true")} style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)' }} className="flex-row items-center p-5 rounded-2xl mb-4 shadow-sm border border-gray-100">
+          <ShieldCheck size={22} color="#4A55A2" />
+          <Text className="flex-1 ml-4 font-semibold text-gray-700">Privacy Policy</Text>
           <ChevronRight size={20} color="#CCC" />
         </TouchableOpacity>
 

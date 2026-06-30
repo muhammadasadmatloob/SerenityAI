@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { CheckCircle2, Circle } from "lucide-react-native";
 import { MotiView } from "moti";
@@ -20,32 +20,23 @@ const { width } = Dimensions.get("window");
 
 export default function PrivacyScreen() {
   const router = useRouter();
-  const [isEncryptedChecked, setEncryptedChecked] = useState(false);
-  const [isTermsChecked, setTermsChecked] = useState(false);
+  const { viewOnly } = useLocalSearchParams();
+  const [isEncryptedChecked, setEncryptedChecked] = useState(viewOnly === "true");
+  const [isTermsChecked, setTermsChecked] = useState(viewOnly === "true");
   const [isLoading, setIsLoading] = useState(true);
 
   const canProceed = isEncryptedChecked && isTermsChecked;
 
   useEffect(() => {
-    async function checkPrivacyStatus() {
-      try {
-        const hasAccepted = await SecureStore.getItemAsync(
-          "HAS_ACCEPTED_PRIVACY",
-        );
-        if (hasAccepted === "true") {
-          router.replace("/(auth)/auth?mode=signup");
-        } else {
-          setIsLoading(false);
-        }
-      } catch {
-        // Variable removed here to fix "defined but never used"
-        setIsLoading(false);
-      }
-    }
-    checkPrivacyStatus();
-  }, [router]);
+    setIsLoading(false);
+  }, []);
 
   const handleContinue = async () => {
+    if (viewOnly === "true") {
+      router.back();
+      return;
+    }
+    
     if (canProceed) {
       try {
         await SecureStore.setItemAsync("HAS_ACCEPTED_PRIVACY", "true");
@@ -128,7 +119,7 @@ export default function PrivacyScreen() {
 
             <View className="mt-12">
               <ReusableButton
-                title="I Understand & Continue"
+                title={viewOnly === "true" ? "Go Back" : "I Understand & Continue"}
                 disabled={!canProceed}
                 className={!canProceed ? "opacity-40" : "opacity-100 shadow-xl"}
                 onPress={handleContinue}

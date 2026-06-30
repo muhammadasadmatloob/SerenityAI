@@ -375,12 +375,14 @@ class DurationUpdate(BaseModel):
 
 class ProfileUpdate(BaseModel):
     name: str
+    gender: Optional[str] = None
     emergency_name: str
     emergency_phone: str
 
 class InfoSync(BaseModel):
     name: str
     dob: str
+    gender: Optional[str] = None
     lat: float
     lng: float
     eName: str
@@ -2616,6 +2618,7 @@ def get_stats(uid: str = Depends(get_current_uid), db: Session = Depends(get_db)
         "eName": user.emergency_name if user else "Not Set",
         "ePhone": user.emergency_phone if user else "Not Set",
         "dob": user.dob if user else "Not Set",
+        "gender": user.gender if (user and user.gender) else "Not Set",
         "lat": user.lat if user else 0.0,
         "lng": user.lng if user else 0.0,
         "path": user.path if (user and user.path) else None
@@ -2636,6 +2639,7 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
     
     user.name = data.name
     user.dob = data.dob
+    user.gender = data.gender
     user.lat = data.lat
     user.lng = data.lng
     user.emergency_name = data.eName
@@ -2649,6 +2653,8 @@ def update_profile(data: ProfileUpdate, uid: str = Depends(get_current_uid), db:
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.name = data.name
+    if data.gender:
+        user.gender = data.gender
     user.emergency_name = data.emergency_name
     user.emergency_phone = data.emergency_phone
     db.commit()

@@ -38,6 +38,7 @@ class User(Base):
     email = Column(String, unique=True)
     name = Column(String)
     dob = Column(String, nullable=True)
+    gender = Column(String, nullable=True)
     lat = Column(Float, nullable=True)
     lng = Column(Float, nullable=True)
     emergency_name = Column(String, nullable=True)
@@ -209,6 +210,13 @@ except Exception:
 try:
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE users ADD COLUMN path VARCHAR"))
+        conn.commit()
+except Exception:
+    pass
+
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN gender VARCHAR"))
         conn.commit()
 except Exception:
     pass

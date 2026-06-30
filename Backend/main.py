@@ -1747,6 +1747,23 @@ def update_session_summary_task(session_id: int, uid: str):
         db.close()
         _unregister_task()
 
+def cascade_uid_update(db: Session, old_uid: str, new_uid: str):
+    """Safely migrate all user data from an old Firebase UID to a new one."""
+    if old_uid == new_uid:
+        return
+    logger.info(f"Cascading UID update from {old_uid} to {new_uid}")
+    
+    db.query(UserSession).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(SessionSummary).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(TherapeuticIntervention).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(UserGoal).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(SessionReflection).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(MoodEntry).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(PersonalityProfile).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(CrisisEvent).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(TreatmentPlan).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+    db.query(SemanticMemory).filter_by(user_uid=old_uid).update({"user_uid": new_uid})
+
 
 @app.post("/api/session/start")
 def start_sess(
@@ -1766,12 +1783,15 @@ def start_sess(
             email_val = f"unknown_{uid}@serenityai.com"
             name_val = "Friend"
         
-        # Conflict Resolution: Check if email already exists (User recreated Firebase account)
+        # Conflict Resolution: Check if email already exists
         existing_email_user = db.query(User).filter_by(email=email_val).first()
         if existing_email_user:
-            logger.info(f"Re-linking existing email {email_val} to new Firebase UID {uid}")
-            existing_email_user.firebase_uid = uid
-            db.commit()
+            old_uid = existing_email_user.firebase_uid
+            if old_uid != uid:
+                logger.info(f"Re-linking existing email {email_val} to new Firebase UID {uid}")
+                cascade_uid_update(db, old_uid, uid)
+                existing_email_user.firebase_uid = uid
+                db.commit()
             user = existing_email_user
         else:
             try:
@@ -2652,8 +2672,11 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
 
         existing_email_user = db.query(User).filter_by(email=email_val).first()
         if existing_email_user:
-            existing_email_user.firebase_uid = uid
-            db.commit()
+            old_uid = existing_email_user.firebase_uid
+            if old_uid != uid:
+                cascade_uid_update(db, old_uid, uid)
+                existing_email_user.firebase_uid = uid
+                db.commit()
             user = existing_email_user
         else:
             try:

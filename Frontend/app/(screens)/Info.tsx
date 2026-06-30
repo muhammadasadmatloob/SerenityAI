@@ -151,41 +151,44 @@ export default function InfoScreen() {
 
     try {
       setLoading(true);
-      const token = await user.getIdToken();
 
-      const response = await fetch(`${BACKEND_URL}/api/info`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: name,
-          dob: birthDate.toISOString(),
-          gender: gender,
-          lat: location.latitude,
-          lng: location.longitude,
-          eName: eName,
-          ePhone: ePhone,
-        }),
-      });
+      // Step 1: Save to Firestore first (this controls onboarding navigation)
+      await saveUserInfo(
+        user.uid,
+        name,
+        birthDate,
+        gender,
+        { latitude: location.latitude, longitude: location.longitude },
+        { name: eName, phone: ePhone }
+      );
 
-      const result = await response.json();
-
-      if (response.ok) {
-        await saveUserInfo(
-          user.uid,
-          name,
-          birthDate,
-          gender,
-          { latitude: location.latitude, longitude: location.longitude },
-          { name: eName, phone: ePhone }
-        );
-      } else {
-        throw new Error(result.detail || "Server sync failed.");
+      // Step 2: Sync to backend (best-effort, don't block the user)
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch(`${BACKEND_URL}/api/info`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: name,
+            dob: birthDate.toISOString(),
+            gender: gender,
+            lat: location.latitude,
+            lng: location.longitude,
+            eName: eName,
+            ePhone: ePhone,
+          }),
+        });
+        if (!response.ok) {
+          console.log("Backend sync returned non-OK:", response.status);
+        }
+      } catch (backendErr) {
+        console.log("Backend sync failed (non-blocking):", backendErr);
       }
     } catch (err: any) {
-      Alert.alert("Sync Error", err.message || "We couldn't save your profile to the database.");
+      Alert.alert("Save Error", err.message || "We couldn't save your profile. Please try again.");
     } finally {
       setLoading(false);
     }

@@ -374,7 +374,15 @@ def decrypt(t: str) -> str:
         return "Encrypted Message"
 
 def get_current_uid(authorization: Optional[str] = Header(None)):
-    return "test_user_123"
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Invalid or Expired Token")
+    try:
+        token = authorization.split(" ")[1]
+        decoded_token = auth.verify_id_token(token)
+        return decoded_token["uid"]
+    except Exception as e:
+        logger.error(f"Auth error: {e}")
+        raise HTTPException(status_code=401, detail="Invalid or Expired Token")
 
 class SessionStart(BaseModel):
     mood: str

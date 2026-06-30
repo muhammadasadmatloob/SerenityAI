@@ -20,6 +20,7 @@ import firebase_admin
 from fastapi import FastAPI, Depends, Header, HTTPException, Request, UploadFile, File, Form, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
 import edge_tts
 import asyncio
 import io
@@ -52,6 +53,7 @@ ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
 ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME")
+SESSION_TIMEOUT_SECONDS = 1800
 
 if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY missing in .env")
@@ -85,11 +87,8 @@ shutdown_event = threading.Event()
 _active_tasks_lock = threading.Lock()
 _active_task_count = 0
 
-# --- CIRCUIT BREAKER FOR RUNPOD ENGINE ---
-engine_consecutive_failures = 0
-engine_circuit_broken = False
-engine_circuit_broken_until = 0.0
-_circuit_breaker_lock = threading.Lock()
+# --- CIRCUIT BREAKER FOR RUNPOD ENGINE (Routed through ai_router.health_states) ---
+
 
 def _register_task():
     """Increment the active background task counter."""
@@ -297,6 +296,11 @@ ERROR_MAP = {
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     logger.error(f"HTTPException {exc.status_code}: {exc.detail} | Path: {request.url.path}")
+    if exc.detail == "Session has expired":
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "Session has expired", "code": "SESSION_EXPIRED"}
+        )
     error_info = ERROR_MAP.get(exc.status_code, {
         "message": "An unexpected error occurred. Please try again.",
         "code": "UNKNOWN_ERROR"
@@ -321,6 +325,25 @@ async def general_exception_handler(request: Request, exc: Exception):
             "success": False,
             "message": "We are experiencing some technical difficulties. Please try again in a few moments.",
             "code": "SERVER_INTERNAL_ERROR"
+        }
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"RequestValidationError: {exc.errors()} | Path: {request.url.path}")
+    error_details = []
+    for err in exc.errors():
+        loc = " -> ".join(str(x) for x in err.get("loc", []))
+        msg = err.get("msg", "invalid value")
+        error_details.append(f"{loc}: {msg}")
+    friendly_msg = "Invalid input data: " + ", ".join(error_details) if error_details else "The submitted data is invalid. Please check your input."
+    
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "message": friendly_msg,
+            "code": "VALIDATION_ERROR"
         }
     )
 
@@ -481,7 +504,7 @@ def check_password_strength(data: PasswordCheck):
     return {"success": True, "message": "Password meets all requirements.", "code": "PASSWORD_VALID"}
 
 @app.post("/api/transcribe")
-def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_current_uid)):
+def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     import tempfile
     try:
         ext = os.path.splitext(file.filename)[1] or ".m4a"
@@ -491,11 +514,15 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
             temp_path = temp_file.name
         
         with open(temp_path, "rb") as audio_file:
-            translation = client.audio.transcriptions.create(
-                file=audio_file,
-                model="whisper-large-v3",
-                prompt=WHISPER_TRANSCRIPTION_PROMPT
-            )
+            kwargs = {
+                "file": audio_file,
+                "model": "whisper-large-v3",
+                "prompt": WHISPER_TRANSCRIPTION_PROMPT
+            }
+            lang_hint = detect_user_language_hint(uid, None, db)
+            if lang_hint:
+                kwargs["language"] = lang_hint
+            translation = client.audio.transcriptions.create(**kwargs)
         
         try:
             os.remove(temp_path)
@@ -648,8 +675,8 @@ async def text_to_speech(text: str, session_id: Optional[str] = None, db: Sessio
 def get_active_session(uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     sess = db.query(UserSession).filter_by(user_uid=uid, is_ended=False).order_by(UserSession.created_at.desc()).first()
     if not sess:
-        return {"session_id": None}
-    return {"session_id": sess.id}
+        return {"session_id": None, "session_cap_seconds": SESSION_TIMEOUT_SECONDS}
+    return {"session_id": sess.id, "session_cap_seconds": SESSION_TIMEOUT_SECONDS}
 
 def compile_past_sessions_summary(uid: str, current_session_id: int, db: Session) -> str:
     # Query up to the last 4 sessions of the user, excluding the current active one
@@ -830,8 +857,37 @@ def compile_past_sessions_summary_v2(uid: str, current_session_id: int, db: Sess
 # --- THERAPEUTIC PLATFORM HELPERS ---
 
 CRISIS_KEYWORDS = [
+    # English
     r"\bsuicid", r"\bself-harm", r"\bkill myself", r"\bend my life", r"\bwant to die",
-    r"\bharm myself", r"\bcutting myself", r"\bslitting my"
+    r"\bharm myself", r"\bcutting myself", r"\bslitting my",
+    # Urdu Script
+    r"خودکشی",
+    r"زندگی ختم",
+    r"مرنا چاہتا",
+    r"مرنا چاہتی",
+    r"خود کو نقصان",
+    r"اپنے آپ کو نقصان",
+    r"جان دے دوں",
+    r"جان دے دوں گا",
+    r"جان دے دوں گی",
+    r"خود کو مار",
+    r"اپنے آپ کو مار",
+    # Roman Urdu / Transliterations
+    r"\bkhud\s?kushi\b",
+    r"\bmarna\s?chahta\b",
+    r"\bmarna\s?chahti\b",
+    r"\bmarna\s?chahata\b",
+    r"\bmarna\s?chahati\b",
+    r"\bzindagi\s?khatam\b",
+    r"\bapni\s?jaan\s?le\b",
+    r"\bjaan\s?de\s?dung",
+    r"\bjaan\s?dena\b",
+    r"\bkhud\s?ko\s?nuksan\b",
+    r"\bkhud\s?ko\s?nuqsan\b",
+    r"\bapne\s?aap\s?ko\s?nuksan\b",
+    r"\bapne\s?aap\s?ko\s?nuqsan\b",
+    r"\bkhud\s?ko\s?mar\b",
+    r"\bapne\s?aap\s?ko\s?mar\b"
 ]
 
 def backend_crisis_scan(text: str) -> bool:
@@ -861,6 +917,41 @@ def resolve_combined_emotion(text_emotion: str, voice_emotion: str) -> str:
     if voice_emotion in ["sadness", "anger", "anxiety", "fear"] and text_emotion == "Neutral":
         return voice_emotion
     return text_emotion
+
+def detect_user_language_hint(uid: str, session_id: Optional[int], db: Session) -> Optional[str]:
+    """
+    Scans recent messages from the current session (or overall user history)
+    to check if they contain Urdu script. Returns 'ur' if Urdu is detected,
+    'en' if English is detected, or None for auto-detection.
+    """
+    messages = []
+    if session_id:
+        messages = db.query(Message).filter_by(session_id=session_id).order_by(Message.id.desc()).limit(5).all()
+    
+    if not messages:
+        # Fallback to general user history
+        sess_ids = [s.id for s in db.query(UserSession).filter_by(user_uid=uid).order_by(UserSession.id.desc()).limit(3).all()]
+        if sess_ids:
+            messages = db.query(Message).filter(Message.session_id.in_(sess_ids)).order_by(Message.id.desc()).limit(5).all()
+            
+    has_urdu = False
+    has_english = False
+    for msg in messages:
+        try:
+            content = decrypt(msg.content)
+            # Check for Urdu characters
+            if any('\u0600' <= c <= '\u06FF' for c in content):
+                has_urdu = True
+            if any('a' <= c.lower() <= 'z' for c in content):
+                has_english = True
+        except Exception:
+            pass
+            
+    if has_urdu:
+        return "ur"
+    if has_english:
+        return "en"
+    return None
 
 def validate_session_integrity(db: Session, uid: str, session_id: int) -> UserSession:
     sess = db.query(UserSession).filter_by(id=session_id, user_uid=uid).first()
@@ -1771,11 +1862,13 @@ def start_sess(
     ).order_by(UserSession.created_at.desc()).first()
     
     if existing_today:
+        existing_today.mood = data.mood
+        db.commit()
         last_ai_msg = db.query(Message).filter_by(
             session_id=existing_today.id, role="assistant"
         ).order_by(Message.timestamp.desc()).first()
         first_message = decrypt(last_ai_msg.content) if last_ai_msg else "Welcome back. Let's continue where we left off."
-        logger.info(f"Mood locked: Returning existing session {existing_today.id} for user {uid}")
+        logger.info(f"Mood locked: Returning existing session {existing_today.id} for user {uid} updated with latest mood: {data.mood}")
         return {"session_id": existing_today.id, "first_message": first_message}
 
     new_sess = UserSession(user_uid=uid, mood=data.mood, path=path_to_use)
@@ -1944,8 +2037,9 @@ def warmup_runpod_engine(uid: str = Depends(get_current_uid)):
     try:
         logger.info(f"User {uid} triggered session warm-up. Warming up RunPod engine...")
         # Send a tiny ping completion to get it out of sleep mode
-        with _circuit_breaker_lock:
-            circuit_broken = engine_circuit_broken and time.time() < engine_circuit_broken_until
+        from ai_router import health_states
+        runpod_health = health_states.get("runpod")
+        circuit_broken = not runpod_health.is_available() if runpod_health else False
             
         if not circuit_broken:
             safe_groq_completion(
@@ -1975,8 +2069,8 @@ def chat_node(
         sess.duration_seconds = data.duration_seconds
         db.commit()
 
-    # Reject new inputs if duration exceeds 30 minutes (1800 seconds)
-    if sess.duration_seconds and sess.duration_seconds >= 1800:
+    # Reject new inputs if duration exceeds 30 minutes
+    if sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS:
         return {"reply": "See you tomorrow in next session."}
 
     # Crisis Management backend-enforced scan
@@ -2149,7 +2243,7 @@ async def chat_voice(
         sess.duration_seconds = duration_seconds
         db.commit()
 
-    if sess.duration_seconds and sess.duration_seconds >= 1800:
+    if sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS:
         return {
             "user_message": {"id": 0, "text": "See you tomorrow in next session.", "audio_url": None},
             "ai_message": {"id": 0, "text": "See you tomorrow in next session.", "audio_url": None}
@@ -2165,11 +2259,15 @@ async def chat_voice(
             temp_path = temp_file.name
         
         with open(temp_path, "rb") as audio_file:
-            translation = client.audio.transcriptions.create(
-                file=audio_file,
-                model="whisper-large-v3",
-                prompt=WHISPER_TRANSCRIPTION_PROMPT
-            )
+            kwargs = {
+                "file": audio_file,
+                "model": "whisper-large-v3",
+                "prompt": WHISPER_TRANSCRIPTION_PROMPT
+            }
+            lang_hint = detect_user_language_hint(uid, session_id, db)
+            if lang_hint:
+                kwargs["language"] = lang_hint
+            translation = client.audio.transcriptions.create(**kwargs)
         user_text = translation.text or ""
         
         try:
@@ -2514,7 +2612,7 @@ def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_uid), d
 @app.get("/api/session/duration/{session_id}")
 def get_duration(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     sess = validate_session_integrity(db, uid, session_id)
-    return {"duration_seconds": sess.duration_seconds or 0}
+    return {"duration_seconds": sess.duration_seconds or 0, "session_cap_seconds": SESSION_TIMEOUT_SECONDS}
 
 @app.post("/api/session/duration")
 def update_duration(data: DurationUpdate, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
@@ -2869,8 +2967,9 @@ def runpod_heartbeat_worker():
             break
             
         # Perform the heartbeat ping if the circuit is not broken
-        with _circuit_breaker_lock:
-            circuit_broken = engine_circuit_broken and time.time() < engine_circuit_broken_until
+        from ai_router import health_states
+        runpod_health = health_states.get("runpod")
+        circuit_broken = not runpod_health.is_available() if runpod_health else False
             
         if not circuit_broken:
             try:

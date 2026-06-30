@@ -252,6 +252,7 @@ export default function ChatScreen() {
 
   const [secondsActive, setSecondsActive] = useState(0);
   const [sessionFinished, setSessionFinished] = useState(false);
+  const [sessionCap, setSessionCap] = useState<number>(1800);
 
   // Voice Call States
   const [isCallActive, setIsCallActive] = useState(false);
@@ -352,9 +353,20 @@ export default function ChatScreen() {
         } else {
           setHistory(data);
         }
+      } else {
+        if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
+          Alert.alert(
+            "Session Expired",
+            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
+          );
+          return;
+        }
+        Alert.alert("Error", data.message || "Failed to load chat history.");
       }
     } catch (e) {
       console.log("History Load Error");
+      Alert.alert("Connection Error", "Donna could not be reached to load history.");
     }
   };
 
@@ -368,12 +380,25 @@ export default function ChatScreen() {
       const data = await res.json();
       if (res.ok && data.duration_seconds !== undefined) {
         setSecondsActive(data.duration_seconds);
-        if (data.duration_seconds >= 1800) {
+        const cap = data.session_cap_seconds || 1800;
+        setSessionCap(cap);
+        if (data.duration_seconds >= cap) {
           setSessionFinished(true);
         }
+      } else {
+        if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
+          Alert.alert(
+            "Session Expired",
+            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
+          );
+          return;
+        }
+        Alert.alert("Error", data.message || "Failed to load session status.");
       }
     } catch (e) {
       console.log("Error loading session duration", e);
+      Alert.alert("Connection Error", "Donna could not be reached to load session status.");
     }
   };
 
@@ -387,9 +412,20 @@ export default function ChatScreen() {
       const data = await res.json();
       if (res.ok && Array.isArray(data)) {
         setSuggestions(data);
+      } else {
+        if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
+          Alert.alert(
+            "Session Expired",
+            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
+          );
+          return;
+        }
+        Alert.alert("Error", data.message || "Failed to load suggestions.");
       }
     } catch (e) {
       console.log("Suggestions Load Error", e);
+      Alert.alert("Connection Error", "Donna could not be reached to load suggestions.");
     }
   };
 
@@ -403,9 +439,17 @@ export default function ChatScreen() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
-        sid = data.session_id?.toString();
+        if (res.ok) {
+          sid = data.session_id?.toString();
+          if (data.session_cap_seconds) {
+            setSessionCap(data.session_cap_seconds);
+          }
+        } else {
+          Alert.alert("Error", data.message || "Failed to fetch active session.");
+        }
       } catch (err) {
         console.log("Error fetching active session", err);
+        Alert.alert("Connection Error", "Donna could not be reached to find your active session.");
       }
     }
     if (sid) {
@@ -429,7 +473,7 @@ export default function ChatScreen() {
     const timer = setInterval(() => {
       setSecondsActive(prev => {
         const next = prev + 1;
-        if (next >= 1800) {
+        if (next >= sessionCap) {
           setSessionFinished(true);
           clearInterval(timer);
           Alert.alert("Session Finished", "See you tomorrow in next session.");
@@ -442,7 +486,7 @@ export default function ChatScreen() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [sessionFinished, activeId, isCallActive]);
+  }, [sessionFinished, activeId, isCallActive, sessionCap]);
 
   // Periodically sync duration to backend database (every 15 seconds)
   useEffect(() => {
@@ -600,8 +644,20 @@ export default function ChatScreen() {
         setHistory((prev) => [...prev, { id: tempUserId + 1, text: data.reply, sender: "ai" }]);
         playSoundEffect("receive");
         fetchSuggestions(activeId);
+      } else {
+        setHistory((prev) => prev.filter((msg) => msg.id !== tempUserId));
+        if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
+          Alert.alert(
+            "Session Expired",
+            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
+          );
+          return;
+        }
+        Alert.alert("Error", data.message || "Failed to send message.");
       }
     } catch (e) {
+      setHistory((prev) => prev.filter((msg) => msg.id !== tempUserId));
       Alert.alert("Connection Error", "Donna could not be reached.");
     } finally {
       setLoading(false);
@@ -1150,7 +1206,15 @@ export default function ChatScreen() {
         if (addedTempMsg) {
           setHistory(prev => prev.filter(msg => msg.id !== tempUserMsgId));
         }
-        Alert.alert("Error", "Could not send voice message.");
+        if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
+          Alert.alert(
+            "Session Expired",
+            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
+          );
+          return;
+        }
+        Alert.alert("Error", data.message || "Could not send voice message.");
       }
     } catch (err) {
       console.log("Error sending voice message:", err);

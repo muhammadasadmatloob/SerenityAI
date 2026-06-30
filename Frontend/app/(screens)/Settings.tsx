@@ -5,6 +5,7 @@ import { ChevronLeft, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react-native
 import { useRouter } from "expo-router";
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from "firebase/auth";
 import { auth } from "../../firebase/firebase";
+import { BACKEND_URL } from "../../constants/config";
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -18,11 +19,52 @@ export default function SettingsScreen() {
 
   const handleUpdate = async () => {
     if (!oldPass || !newPass || !confirmPass) return Alert.alert("Required", "Please fill all fields.");
-    if (newPass.length < 6) return Alert.alert("Weak Password", "New password must be at least 6 characters.");
     if (newPass !== confirmPass) return Alert.alert("Mismatch", "New password and confirm password do not match.");
     if (oldPass === newPass) return Alert.alert("Same Password", "New password must be different from old password.");
 
     setLoading(true);
+    
+    try {
+      const valRes = await fetch(`${BACKEND_URL}/api/auth/validate-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPass })
+      });
+      const valData = await valRes.json();
+      if (!valRes.ok || !valData.success) {
+        Alert.alert("Weak Password", valData.message || "Password does not meet complexity requirements.");
+        setLoading(false);
+        return;
+      }
+    } catch (err: any) {
+      console.log("Password validation request failed, falling back to local checks:", err);
+      if (newPass.length < 8) {
+        Alert.alert("Weak Password", "New password must be at least 8 characters long.");
+        setLoading(false);
+        return;
+      }
+      if (!/[A-Z]/.test(newPass)) {
+        Alert.alert("Weak Password", "New password must contain at least one uppercase letter (A-Z).");
+        setLoading(false);
+        return;
+      }
+      if (!/[a-z]/.test(newPass)) {
+        Alert.alert("Weak Password", "New password must contain at least one lowercase letter (a-z).");
+        setLoading(false);
+        return;
+      }
+      if (!/\d/.test(newPass)) {
+        Alert.alert("Weak Password", "New password must contain at least one number (0-9).");
+        setLoading(false);
+        return;
+      }
+      if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPass)) {
+        Alert.alert("Weak Password", "New password must contain at least one special character (e.g., !, @, #, $, %, &, *).");
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       const user = auth.currentUser;
       if (user && user.email) {
@@ -94,7 +136,7 @@ export default function SettingsScreen() {
               <Lock size={18} color="#94A3B8" />
             </View>
             <TextInput
-              placeholder="Enter new password (min 6 chars)"
+              placeholder="Enter new password (min 8 chars & complex)"
               placeholderTextColor="#9CA3AF"
               secureTextEntry={!showNew}
               value={newPass}

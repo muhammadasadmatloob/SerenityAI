@@ -13,7 +13,7 @@ logger = logging.getLogger("ai_router")
 
 # --- ENVIRONMENT-DRIVEN CONFIGURATION ---
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
-RUNPOD_BASE_URL = os.getenv("THERAPY_ENGINE_BASE_URL", "https://api.runpod.ai/v1/chat")
+RUNPOD_BASE_URL = os.getenv("THERAPY_ENGINE_URL", "https://api.runpod.ai/v1/chat")
 ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME", "phi-3")
 RUNPOD_TIMEOUT = float(os.getenv("RUNPOD_TIMEOUT", "60.0"))
 RUNPOD_COOLDOWN = float(os.getenv("RUNPOD_COOLDOWN", "120.0"))

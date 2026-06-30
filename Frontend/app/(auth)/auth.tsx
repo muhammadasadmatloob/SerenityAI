@@ -6,6 +6,8 @@ import { Eye, EyeOff } from "lucide-react-native";
 import React, { useState } from "react";
 import { Alert, Pressable, Text, TextInput, View, ActivityIndicator, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BACKEND_URL } from "../../constants/config";
+
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -28,25 +30,49 @@ export default function AuthScreen() {
         Alert.alert("Mismatch", "Passwords do not match");
         return;
       }
-      if (password.length < 8) {
-        Alert.alert("Weak Password", "Password must be at least 8 characters long.");
-        return;
-      }
-      if (!/[A-Z]/.test(password)) {
-        Alert.alert("Weak Password", "Password must contain at least one uppercase letter (A-Z).");
-        return;
-      }
-      if (!/[a-z]/.test(password)) {
-        Alert.alert("Weak Password", "Password must contain at least one lowercase letter (a-z).");
-        return;
-      }
-      if (!/\d/.test(password)) {
-        Alert.alert("Weak Password", "Password must contain at least one number (0-9).");
-        return;
-      }
-      if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-        Alert.alert("Weak Password", "Password must contain at least one special character (e.g., !, @, #, $, %, &, *).");
-        return;
+      
+      try {
+        setLoading(true);
+        const valRes = await fetch(`${BACKEND_URL}/api/auth/validate-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password })
+        });
+        const valData = await valRes.json();
+        if (!valRes.ok || !valData.success) {
+          Alert.alert("Weak Password", valData.message || "Password does not meet complexity requirements.");
+          setLoading(false);
+          return;
+        }
+      } catch (err: any) {
+        console.log("Password validation request failed, falling back to local checks:", err);
+        if (password.length < 8) {
+          Alert.alert("Weak Password", "Password must be at least 8 characters long.");
+          setLoading(false);
+          return;
+        }
+        if (!/[A-Z]/.test(password)) {
+          Alert.alert("Weak Password", "Password must contain at least one uppercase letter (A-Z).");
+          setLoading(false);
+          return;
+        }
+        if (!/[a-z]/.test(password)) {
+          Alert.alert("Weak Password", "Password must contain at least one lowercase letter (a-z).");
+          setLoading(false);
+          return;
+        }
+        if (!/\d/.test(password)) {
+          Alert.alert("Weak Password", "Password must contain at least one number (0-9).");
+          setLoading(false);
+          return;
+        }
+        if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+          Alert.alert("Weak Password", "Password must contain at least one special character (e.g., !, @, #, $, %, &, *).");
+          setLoading(false);
+          return;
+        }
+      } finally {
+        setLoading(false);
       }
     }
 

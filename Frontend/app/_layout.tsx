@@ -73,6 +73,7 @@ export default function RootLayout() {
   const [networkError, setNetworkError] = useState<boolean>(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
   const [splashMessage, setSplashMessage] = useState("Your personal AI therapist");
+  const [user, setUser] = useState<any>(null);
   const unsubSnap = useRef<(() => void) | null>(null);
 
   // 1. TabBar Visibility Logic
@@ -121,16 +122,17 @@ export default function RootLayout() {
     discoverBackend();
 
     // 3. Register Auth Listener immediately to restore user session from AsyncStorage
-    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+    const unsubAuth = onAuthStateChanged(auth, async (authUser) => {
       // Clean up previous Firestore listener if user changes
       if (unsubSnap.current) { 
         unsubSnap.current(); 
         unsubSnap.current = null; 
       }
 
-      if (user) {
+      if (authUser) {
+        setUser(authUser);
         // Trigger background cleanup of leftover sessions
-        user.getIdToken().then((token) => {
+        authUser.getIdToken().then((token) => {
           fetch(`${BACKEND_URL}/api/session/end-all-active`, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` }
@@ -138,17 +140,19 @@ export default function RootLayout() {
         }).catch(() => {});
 
         // Reload user to get the latest emailVerified status from Firebase
-        if (!user.emailVerified) {
+        if (!authUser.emailVerified) {
           try {
-            await user.reload();
-            user = auth.currentUser || user;
+            await authUser.reload();
+            const reloadedUser = auth.currentUser || authUser;
+            setUser(reloadedUser);
+            authUser = reloadedUser;
           } catch (e) {
             console.log("Failed to reload user verification status:", e);
           }
         }
 
         // Listen to the user's document for real-time onboarding completion status
-        unsubSnap.current = onSnapshot(doc(db, "users", user.uid), (snap) => {
+        unsubSnap.current = onSnapshot(doc(db, "users", authUser.uid), (snap) => {
           const data = snap.data();
           const complete = !!(snap.exists() && data?.isOnboardingComplete === true);
           setIsProfileComplete(complete);
@@ -162,6 +166,7 @@ export default function RootLayout() {
           SplashScreen.hideAsync();
         });
       } else {
+        setUser(null);
         setIsProfileComplete(false);
         setIsAppReady(true);
         SplashScreen.hideAsync();
@@ -197,7 +202,6 @@ export default function RootLayout() {
     const inAuthGroup = segments[0] === "(auth)";
     const onVerifyScreen = segments[segments.length - 1] === "EmailVerify";
     const onInfoScreen = segments[segments.length - 1] === "Info";
-    const user = auth.currentUser;
 
     if (!user) {
       // Redirect to Auth if not logged in
@@ -213,7 +217,7 @@ export default function RootLayout() {
       const isOnSetupScreen = inAuthGroup || onVerifyScreen || onInfoScreen;
       if (isOnSetupScreen) router.replace("/(screens)/Feel");
     }
-  }, [isAppReady, isProfileComplete, segments, showCustomSplash, networkError]);
+  }, [isAppReady, isProfileComplete, segments, showCustomSplash, networkError, user]);
 
   if (!isAppReady) return null;
 

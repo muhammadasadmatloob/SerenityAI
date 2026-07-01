@@ -1,6 +1,22 @@
-# SerenityAI
+<div align="center">
+
+# 🌟 SerenityAI
+### Final Year Project - DHA Suffa University
+
+</div>
 
 SerenityAI is a comprehensive mental wellness and therapeutic support application featuring a dynamic React Native Frontend (built with Expo) and a FastAPI Backend powered by AI capabilities.
+
+## 👥 Group Members
+
+| Name | Roll Number |
+| :--- | :--- |
+| **MUHAMMAD ASAD MATLOOB** | `CS221127` |
+| **HASSAN KHAN** | `CS221145` |
+| **ILIYAN RAHIM** | `CS221131` |
+| **RAZA ALI** | `CS221136` |
+
+<br />
 
 ## 📱 Download the Android APK
 

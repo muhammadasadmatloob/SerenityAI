@@ -52,7 +52,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
-ENGINE_MODEL_NAME = "/runpod-volume/Serenity/donna-finetuned"
+ENGINE_MODEL_NAME = "microsoft/Phi-4-mini-instruct"
 SESSION_TIMEOUT_SECONDS = 1800
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
@@ -204,6 +204,7 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
         "messages": messages,
         "temperature": temperature,
         "top_p": top_p,
+        "timeout": 60.0
     }
     
     if max_tokens:
@@ -215,7 +216,11 @@ def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format
     if response_format:
         kwargs["response_format"] = response_format
         
-    return llm_client.chat.completions.create(**kwargs)
+    try:
+        return llm_client.chat.completions.create(**kwargs)
+    except Exception as e:
+        logger.error(f"RunPod Engine failed or timed out: {e}")
+        raise e
 
 if not firebase_admin._apps:
     firebase_json = os.getenv("FIREBASE_JSON_CONTENT")
@@ -419,8 +424,11 @@ def health_check(db: Session = Depends(get_db)):
     if THERAPY_ENGINE_BASE_URL:
         try:
             health_url = THERAPY_ENGINE_BASE_URL
-            if "/v1" in health_url:
+            if "/openai/v1" in health_url:
+                health_url = health_url.replace("/openai/v1", "")
+            elif "/v1" in health_url:
                 health_url = health_url.replace("/v1", "")
+                
             if not health_url.endswith("/health"):
                 health_url = health_url.rstrip("/") + "/health"
                 

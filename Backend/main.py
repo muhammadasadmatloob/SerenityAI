@@ -52,7 +52,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
-ENGINE_MODEL_NAME = "microsoft/Phi-4-mini-instruct"
+ENGINE_MODEL_NAME = "/runpod-volume/Serenity/donna-finetuned"
 SESSION_TIMEOUT_SECONDS = 1800
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 

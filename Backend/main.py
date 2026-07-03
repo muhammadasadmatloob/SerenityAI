@@ -61,11 +61,9 @@ if not ENCRYPTION_KEY:
 
 cipher = Fernet(ENCRYPTION_KEY.encode())
 
-client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-engine_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url=THERAPY_ENGINE_BASE_URL)
+audio_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
+llm_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url=THERAPY_ENGINE_BASE_URL)
 GROQ_MODEL = "llama-3.3-70b-versatile"
-GROQ_FALLBACK_MODEL = "llama-3.1-8b-instant"
-GROQ_FALLBACK_MODELS = ["llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]
 
 # --- SCHEMA VERSIONING ---
 CURRENT_SCHEMA_VERSION = "v1"
@@ -173,7 +171,7 @@ def initialize_services():
 
     # 3. Verify Groq API Connectivity
     try:
-        client.models.list()
+        audio_client.models.list()
         logger.info("✅ Groq API connectivity validated successfully.")
     except Exception as e:
         logger.critical(f"❌ CRITICAL: Groq API connectivity validation failed: {e}")
@@ -197,61 +195,27 @@ def initialize_services():
 
     logger.info("🚀 All critical services validated successfully. Starting application server...")
 
-def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format=None, force_fallback=False, default_model=None, max_tokens=None, frequency_penalty=0.0, presence_penalty=0.0, client_type: str = "groq"):
+def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format=None, force_fallback=False, default_model=None, max_tokens=None, frequency_penalty=0.0, presence_penalty=0.0):
     # Store the messages in context for debugging on error
     llm_payload_context.set(messages)
     
-    # Map client_type & default_model to task_type for priority routing
-    # Requirement 9: Lightweight models are prioritized for summaries, memory extraction, suggestions, and title generation (default "analysis" task)
-    if client_type == "engine":
-        task_type = "complex_reasoning"
-    elif client_type == "groq" and default_model == "llama-3.3-70b-versatile":
-        task_type = "complex_reasoning"
-    else:
-        task_type = "chat" if client_type == "engine" else "analysis"
-
-    # Call the centralized AI Router
-    response = AIRouter.complete(
-        messages=messages,
-        task_type=task_type,
-        temperature=temperature,
-        top_p=top_p,
-        response_format=response_format,
-        max_tokens=max_tokens,
-        frequency_penalty=frequency_penalty,
-        presence_penalty=presence_penalty
-    )
-
-    # Wrap the standardized AIResponse back to the structure main.py expects
-    class MockChoiceMessage:
-        def __init__(self, content):
-            self._content = content
-
-        @property
-        def content(self):
-            return self._content
-
-        @content.setter
-        def content(self, val):
-            self._content = val
-
-    class MockChoice:
-        def __init__(self, content):
-            self.message = MockChoiceMessage(content)
-
-    class MockCompletion:
-        def __init__(self, content, usage=None):
-            self.choices = [MockChoice(content)]
-            self.usage = usage
-
-    class MockUsage:
-        def __init__(self, prompt_tokens, completion_tokens, total_tokens):
-            self.prompt_tokens = prompt_tokens
-            self.completion_tokens = completion_tokens
-            self.total_tokens = total_tokens
-
-    usage = MockUsage(response.prompt_tokens, response.completion_tokens, response.total_tokens)
-    return MockCompletion(response.content, usage)
+    kwargs = {
+        "model": default_model or ENGINE_MODEL_NAME,
+        "messages": messages,
+        "temperature": temperature,
+        "top_p": top_p,
+    }
+    
+    if max_tokens:
+        kwargs["max_tokens"] = max_tokens
+    if frequency_penalty:
+        kwargs["frequency_penalty"] = frequency_penalty
+    if presence_penalty:
+        kwargs["presence_penalty"] = presence_penalty
+    if response_format:
+        kwargs["response_format"] = response_format
+        
+    return llm_client.chat.completions.create(**kwargs)
 
 if not firebase_admin._apps:
     firebase_json = os.getenv("FIREBASE_JSON_CONTENT")
@@ -447,7 +411,7 @@ def health_check(db: Session = Depends(get_db)):
         
     # 2. Check Groq
     try:
-        client.models.list()
+        audio_client.models.list()
     except Exception as e:
         groq_status = f"Groq API connection failed: {e}"
         
@@ -524,7 +488,7 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
             lang_hint = detect_user_language_hint(uid, None, db)
             if lang_hint:
                 kwargs["language"] = lang_hint
-            translation = client.audio.transcriptions.create(**kwargs)
+            translation = audio_client.audio.transcriptions.create(**kwargs)
         
         try:
             os.remove(temp_path)
@@ -966,85 +930,13 @@ def validate_session_integrity(db: Session, uid: str, session_id: int) -> UserSe
     return sess
 
 def hybrid_ai_router(messages, current_phase: str, path: str = None, response_format=None) -> Any:
-    # 1. Casual path only routes to Groq for speed and cost efficiency
-    if path == "casual":
-        logger.info("Hybrid AI Router: Casual path, routing to Groq only...")
-        return safe_groq_completion(
-            messages=messages,
-            temperature=0.6,
-            top_p=0.95,
-            response_format=response_format,
-            client_type="groq"
-        )
-
-    # 1b. Only route to RunPod Engine if phase is 'intervention' or 'emotional_processing'
-    # Otherwise, route to Groq only for speed, cost efficiency, and lower latency
-    if current_phase not in ["intervention", "emotional_processing"]:
-        logger.info(f"Hybrid AI Router: Phase '{current_phase}' is simple/conversational, routing to Groq only...")
-        return safe_groq_completion(
-            messages=messages,
-            temperature=0.6,
-            top_p=0.95,
-            response_format=response_format,
-            client_type="groq"
-        )
-
-    # 2. For therapeutic phases, concurrently run Groq and the RunPod Fine-Tuned Engine
-    logger.info(f"Hybrid AI Router: Starting concurrent blend of Groq + RunPod Fine-Tuned Engine (Phase: '{current_phase}')...")
-    
-    future_groq = global_ai_executor.submit(
-        safe_groq_completion,
-        messages=messages,
-        temperature=0.6,
-        top_p=0.95,
-        response_format=response_format,
-        client_type="groq"
-    )
-    future_engine = global_ai_executor.submit(
-        safe_groq_completion,
-        messages=messages,
-        temperature=0.6,
-        top_p=0.95,
-        response_format=response_format,
-        client_type="engine"
-    )
-
-    # Wait a maximum of 7 seconds for both to complete
-    done, not_done = concurrent.futures.wait(
-        [future_groq, future_engine],
-        timeout=7.0,
-        return_when=concurrent.futures.ALL_COMPLETED
-    )
-
-    res_groq = future_groq.result() if future_groq in done and not future_groq.exception() else None
-    res_engine = future_engine.result() if future_engine in done and not future_engine.exception() else None
-
-    # Case 1: Both finished fast enough - merge them
-    if res_groq and res_engine:
-        parsed_groq = parse_llm_response(res_groq.choices[0].message.content or "")
-        parsed_engine = parse_llm_response(res_engine.choices[0].message.content or "")
-        groq_text = (parsed_groq.get("therapeutic_response") or "").strip()
-        engine_text = (parsed_engine.get("therapeutic_response") or "").strip()
-        parsed_groq["therapeutic_response"] = f"{groq_text} {engine_text}" if groq_text and engine_text else (engine_text or groq_text)
-        res_groq.choices[0].message.content = json.dumps(parsed_groq)
-        return res_groq
-
-    # Case 2: RunPod is cold starting (taking > 7s). Return Groq instantly so user doesn't wait!
-    if res_groq:
-        logger.info("Hybrid AI Router: RunPod is still loading. Returning Groq instantly.")
-        return res_groq
-
-    if res_engine:
-        return res_engine
-
-    # Fallback if both fail
+    logger.info(f"Hybrid AI Router: Routing phase '{current_phase}' directly to RunPod Engine...")
     try:
         return safe_groq_completion(
             messages=messages,
             temperature=0.6,
             top_p=0.95,
-            response_format=response_format,
-            client_type="groq"
+            response_format=response_format
         )
     except Exception as e:
         logger.error(f"Fallback AI failed: {e}")
@@ -1708,7 +1600,7 @@ def update_session_summary_task(session_id: int, uid: str):
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             response_format={"type": "json_object"},
-            default_model=GROQ_MODEL,
+            default_model=ENGINE_MODEL_NAME,
             max_tokens=4000
         )
         raw_summary = res.choices[0].message.content or ""
@@ -2220,7 +2112,7 @@ async def chat_voice(
             lang_hint = detect_user_language_hint(uid, session_id, db)
             if lang_hint:
                 kwargs["language"] = lang_hint
-            translation = client.audio.transcriptions.create(**kwargs)
+            translation = audio_client.audio.transcriptions.create(**kwargs)
         user_text = translation.text or ""
         
         try:
@@ -2538,7 +2430,7 @@ def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_uid), d
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": f"Conversation history:\n{conversation_str}\n\nWhat are the next 3 reply options?"}
             ],
-            default_model=GROQ_MODEL
+            default_model=ENGINE_MODEL_NAME
         )
         reply = res.choices[0].message.content or ""
         # Parse output line by line

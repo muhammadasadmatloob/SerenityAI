@@ -52,7 +52,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
-ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME")
+ENGINE_MODEL_NAME = "/runpod-volume/Serenity/donna-finetuned"
 SESSION_TIMEOUT_SECONDS = 1800
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
@@ -62,7 +62,7 @@ if not ENCRYPTION_KEY:
 cipher = Fernet(ENCRYPTION_KEY.encode())
 
 audio_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-llm_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url=THERAPY_ENGINE_BASE_URL)
+llm_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url="https://api.runpod.ai/v2/7u82fpn8hx6aab/openai/v1")
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # --- SCHEMA VERSIONING ---
@@ -1881,21 +1881,13 @@ def warmup_runpod_engine(uid: str = Depends(get_current_uid)):
     """Pings the RunPod engine to warm it up before the session starts."""
     try:
         logger.info(f"User {uid} triggered session warm-up. Warming up RunPod engine...")
-        # Send a tiny ping completion to get it out of sleep mode
-        from ai_router import health_states
-        runpod_health = health_states.get("runpod")
-        circuit_broken = not runpod_health.is_available() if runpod_health else False
-            
-        if not circuit_broken:
-            safe_groq_completion(
-                messages=[{"role": "user", "content": "ping"}],
-                temperature=0.1,
-                top_p=0.9,
-                client_type="engine"
-            )
-            return {"status": "success", "message": "Engine is warm"}
-        else:
-            return {"status": "fallback", "message": "Engine circuit is broken, using fallback"}
+        llm_client.chat.completions.create(
+            model=ENGINE_MODEL_NAME,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+            timeout=15.0
+        )
+        return {"status": "success", "message": "Engine is warm"}
     except Exception as e:
         logger.warning(f"Engine warm-up ping failed: {e}")
         return {"status": "failed", "message": str(e)}
@@ -2810,11 +2802,11 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
         return {"status": "created", "plan_id": new_plan.id}
 
 def runpod_heartbeat_worker():
-    """Background worker that pings the RunPod engine every 90 seconds to prevent cold starts."""
+    """Background worker that pings the RunPod engine every 100 seconds to prevent cold starts."""
     logger.info("Starting RunPod engine heartbeat/warm-up worker...")
     while not shutdown_event.is_set():
-        # Sleep for 1.5 minutes (90 seconds), checking shutdown_event every 5 seconds
-        for _ in range(18):
+        # Sleep for 100 seconds, checking shutdown_event every 5 seconds
+        for _ in range(20):
             if shutdown_event.is_set():
                 break
             time.sleep(5)
@@ -2822,26 +2814,17 @@ def runpod_heartbeat_worker():
         if shutdown_event.is_set():
             break
             
-        # Perform the heartbeat ping if the circuit is not broken
-        from ai_router import health_states
-        runpod_health = health_states.get("runpod")
-        circuit_broken = not runpod_health.is_available() if runpod_health else False
-            
-        if not circuit_broken:
-            try:
-                logger.info("Sending heartbeat ping to RunPod engine...")
-                # Run a small completion request with a short timeout to keep it warm
-                safe_groq_completion(
-                    messages=[{"role": "user", "content": "ping"}],
-                    temperature=0.1,
-                    top_p=0.9,
-                    client_type="engine"
-                )
-                logger.info("Heartbeat ping to RunPod engine completed successfully.")
-            except Exception as e:
-                logger.warning(f"RunPod engine heartbeat ping failed: {e}")
-        else:
-            logger.info("Heartbeat ping skipped because RunPod circuit breaker is currently tripped.")
+        try:
+            logger.info("Sending 1-token heartbeat ping to RunPod vLLM to keep GPU awake...")
+            llm_client.chat.completions.create(
+                model=ENGINE_MODEL_NAME,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+                timeout=15.0
+            )
+            logger.info("Heartbeat ping to RunPod engine completed successfully.")
+        except Exception as e:
+            logger.warning(f"RunPod engine heartbeat ping failed: {e}")
 
 @app.on_event("startup")
 def startup_event():

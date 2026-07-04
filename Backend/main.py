@@ -39,7 +39,7 @@ from database import (
 )
 from voice_analyzer import analyze_voice_emotion
 from semantic_memory import add_semantic_memory, retrieve_semantic_memories
-from ai_router import AIRouter
+from services.ai_ensemble_service import generate_ensemble_response
 
 load_dotenv()
 
@@ -52,7 +52,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
 RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
-ENGINE_MODEL_NAME = "/runpod-volume/Serenity/donna-finetuned"
+ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME")
 SESSION_TIMEOUT_SECONDS = 1800
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
@@ -62,7 +62,7 @@ if not ENCRYPTION_KEY:
 cipher = Fernet(ENCRYPTION_KEY.encode())
 
 audio_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-llm_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url="https://api.runpod.ai/v2/7u82fpn8hx6aab/openai/v1")
+llm_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url=THERAPY_ENGINE_BASE_URL)
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # --- SCHEMA VERSIONING ---
@@ -937,17 +937,22 @@ def validate_session_integrity(db: Session, uid: str, session_id: int) -> UserSe
             raise HTTPException(status_code=400, detail="Session has expired")
     return sess
 
-def hybrid_ai_router(messages, current_phase: str, path: str = None, response_format=None) -> Any:
-    logger.info(f"Hybrid AI Router: Routing phase '{current_phase}' directly to RunPod Engine...")
+async def hybrid_ai_router(messages, current_phase: str, path: str = None, response_format=None) -> Any:
+    logger.info(f"Hybrid AI Router: Routing phase '{current_phase}' to Ensemble Service...")
     try:
-        return safe_groq_completion(
+        raw_json_str = await generate_ensemble_response(
             messages=messages,
-            temperature=0.6,
-            top_p=0.95,
             response_format=response_format
         )
+        class MockChoiceMessage:
+            def __init__(self, content): self.content = content
+        class MockChoice:
+            def __init__(self, content): self.message = MockChoiceMessage(content)
+        class MockCompletion:
+            def __init__(self, content): self.choices = [MockChoice(content)]
+        return MockCompletion(raw_json_str)
     except Exception as e:
-        logger.error(f"Fallback AI failed: {e}")
+        logger.error(f"Ensemble AI failed: {e}")
         class MockChoiceMessage:
             def __init__(self, content): self.content = content
         class MockChoice:
@@ -1688,7 +1693,7 @@ def resolve_uid_conflict(db: Session, existing_email_user: User, new_uid: str, e
 
 
 @app.post("/api/session/start")
-def start_sess(
+async def start_sess(
     data: SessionStart, 
     background_tasks: BackgroundTasks,
     uid: str = Depends(get_current_uid), 
@@ -1819,7 +1824,7 @@ def start_sess(
         messages.append({"role": "user", "content": f"Hello Donna, I am feeling {mood_str}."})
     
     try:
-        res = hybrid_ai_router(
+        res = await hybrid_ai_router(
             messages=messages,
             current_phase="rapport_building",
             path=path_to_use,
@@ -1901,7 +1906,7 @@ def warmup_runpod_engine(uid: str = Depends(get_current_uid)):
         return {"status": "failed", "message": str(e)}
 
 @app.post("/api/chat")
-def chat_node(
+async def chat_node(
     data: ChatMsg, 
     background_tasks: BackgroundTasks,
     uid: str = Depends(get_current_uid), 
@@ -2021,7 +2026,7 @@ def chat_node(
     )
 
     try:
-        res = hybrid_ai_router(
+        res = await hybrid_ai_router(
             messages=[{"role": "system", "content": system_prompt}] + context,
             current_phase=current_phase,
             path=sess.path,
@@ -2275,7 +2280,7 @@ async def chat_voice(
     system_prompt += voice_context_inject
 
     try:
-        res = hybrid_ai_router(
+        res = await hybrid_ai_router(
             messages=[{"role": "system", "content": system_prompt}] + context,
             current_phase=current_phase,
             path=sess.path,

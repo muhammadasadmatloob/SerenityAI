@@ -1,7 +1,6 @@
 import os
 import datetime
 import time
-import openai
 import contextvars
 import requests
 from functools import lru_cache
@@ -31,7 +30,6 @@ from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from firebase_admin import auth, credentials
 from pydantic import BaseModel
-from openai import OpenAI
 from database import (
     get_db, User, UserSession, Message, SessionSummary, MessageAnalysis,
     TherapeuticIntervention, UserGoal, SessionReflection, MoodEntry,
@@ -39,8 +37,7 @@ from database import (
 )
 from voice_analyzer import analyze_voice_emotion
 from semantic_memory import add_semantic_memory, retrieve_semantic_memories
-from services.ai_ensemble_service import generate_ensemble_response
-
+import google.generativeai as genai
 load_dotenv()
 
 # --- LOGGING ---
@@ -48,11 +45,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("donna_ai")
 
 # --- CONFIG ---
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-THERAPY_ENGINE_BASE_URL = os.getenv("THERAPY_ENGINE_URL")
-RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
-ENGINE_MODEL_NAME = os.getenv("ENGINE_MODEL_NAME")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
 SESSION_TIMEOUT_SECONDS = 1800
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
@@ -60,10 +57,6 @@ if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY missing in .env")
 
 cipher = Fernet(ENCRYPTION_KEY.encode())
-
-audio_client = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
-llm_client = OpenAI(api_key=RUNPOD_API_KEY or "ignored", base_url=THERAPY_ENGINE_BASE_URL)
-GROQ_MODEL = "llama-3.3-70b-versatile"
 
 # --- SCHEMA VERSIONING ---
 CURRENT_SCHEMA_VERSION = "v1"
@@ -136,10 +129,8 @@ def initialize_services():
     
     # 1. Validate environment variables
     required_vars = {
-        "GROQ_API_KEY": os.getenv("GROQ_API_KEY"),
         "FIREBASE_JSON_CONTENT": os.getenv("FIREBASE_JSON_CONTENT"),
-        "ENGINE_MODEL_NAME": os.getenv("ENGINE_MODEL_NAME"),
-        "THERAPY_ENGINE_URL": os.getenv("THERAPY_ENGINE_URL"),
+        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
     }
     
     missing_vars = [name for name, val in required_vars.items() if not val or not val.strip()]
@@ -169,59 +160,50 @@ def initialize_services():
     finally:
         db.close()
 
-    # 3. Verify Groq API Connectivity
+    # 3. Verify Gemini API Connectivity
     try:
-        audio_client.models.list()
-        logger.info("✅ Groq API connectivity validated successfully.")
+        import google.generativeai as genai
+        if not os.getenv("GEMINI_API_KEY"):
+            logger.critical("❌ CRITICAL: GEMINI_API_KEY missing in .env")
+            raise SystemExit(1)
+        logger.info("✅ Gemini API configuration validated successfully.")
     except Exception as e:
-        logger.critical(f"❌ CRITICAL: Groq API connectivity validation failed: {e}")
+        logger.critical(f"❌ CRITICAL: Gemini API validation failed: {e}")
         raise SystemExit(1)
-
-    # 4. Verify RunPod Engine Connectivity
-    try:
-        health_url = os.getenv("THERAPY_ENGINE_URL")
-        if "/v1" in health_url:
-            health_url = health_url.replace("/v1", "")
-        if not health_url.endswith("/health"):
-            health_url = health_url.rstrip("/") + "/health"
-            
-        res = requests.get(health_url, timeout=10.0)
-        if res.status_code == 200:
-            logger.info("✅ RunPod Engine connectivity validated successfully.")
-        else:
-            logger.warning(f"⚠️ RunPod Engine health check returned HTTP {res.status_code}: {res.text}")
-    except Exception as e:
-        logger.warning(f"⚠️ RunPod Engine health check connection failed during startup: {e}")
 
     logger.info("🚀 All critical services validated successfully. Starting application server...")
 
-def safe_groq_completion(messages, temperature=0.85, top_p=0.95, response_format=None, force_fallback=False, default_model=None, max_tokens=None, frequency_penalty=0.0, presence_penalty=0.0):
-    # Store the messages in context for debugging on error
-    llm_payload_context.set(messages)
+async def safe_gemini_completion(prompt: str, system_instruction: str, max_tokens: int = 4000, temperature: float = 0.3, response_format=None):
+    # Store the prompt in context for debugging on error
+    llm_payload_context.set([{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}])
     
-    kwargs = {
-        "model": default_model or ENGINE_MODEL_NAME,
-        "messages": messages,
+    generation_config_args = {
         "temperature": temperature,
-        "top_p": top_p,
-        "timeout": 60.0
+        "max_output_tokens": max_tokens,
     }
-    
-    if max_tokens:
-        kwargs["max_tokens"] = max_tokens
-    if frequency_penalty:
-        kwargs["frequency_penalty"] = frequency_penalty
-    if presence_penalty:
-        kwargs["presence_penalty"] = presence_penalty
-    if response_format:
-        kwargs["response_format"] = response_format
+    if response_format and response_format.get("type") == "json_object":
+        generation_config_args["response_mime_type"] = "application/json"
         
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=system_instruction,
+        generation_config=genai.types.GenerationConfig(**generation_config_args)
+    )
+    
     try:
-        return llm_client.chat.completions.create(**kwargs)
+        res = await model.generate_content_async(prompt)
+        # Create a mock completion object to satisfy any legacy callers
+        class MockChoiceMessage:
+            def __init__(self, content): self.content = content
+        class MockChoice:
+            def __init__(self, content): self.message = MockChoiceMessage(content)
+        class MockCompletion:
+            def __init__(self, content): self.choices = [MockChoice(content)]
+        
+        return MockCompletion(res.text)
     except Exception as e:
-        logger.error(f"RunPod Engine failed or timed out: {e}")
+        logger.error(f"Gemini Engine failed or timed out: {e}")
         raise e
-
 if not firebase_admin._apps:
     firebase_json = os.getenv("FIREBASE_JSON_CONTENT")
     if firebase_json:
@@ -414,36 +396,15 @@ def health_check(db: Session = Depends(get_db)):
     except Exception as e:
         db_status = f"Database connection failed: {e}"
         
-    # 2. Check Groq
+    # 2. Check Gemini
+    import google.generativeai as genai
     try:
-        audio_client.models.list()
+        if not os.getenv("GEMINI_API_KEY"):
+            raise ValueError("GEMINI_API_KEY is not set")
+        engine_status = "ok"
     except Exception as e:
-        groq_status = f"Groq API connection failed: {e}"
+        engine_status = f"Gemini API configuration failed: {e}"
         
-    # 3. Check RunPod Engine
-    if THERAPY_ENGINE_BASE_URL:
-        try:
-            health_url = THERAPY_ENGINE_BASE_URL
-            if "/openai/v1" in health_url:
-                health_url = health_url.replace("/openai/v1", "")
-            elif "/v1" in health_url:
-                health_url = health_url.replace("/v1", "")
-                
-            if not health_url.endswith("/health"):
-                health_url = health_url.rstrip("/") + "/health"
-                
-            res = requests.get(health_url, timeout=5.0)
-            if res.status_code != 200:
-                engine_status = f"HTTP Error {res.status_code}: {res.text}"
-        except Exception as e:
-            error_str = str(e)
-            if "ModelWrapper" in error_str or "untagged enum" in error_str:
-                engine_status = "ModelWrapper Parse Error"
-            else:
-                engine_status = f"Connection failed: {error_str}"
-    else:
-        engine_status = "Disabled (THERAPY_ENGINE_URL not set)"
-
     overall_status = "ok" if db_status == "ok" else "error"
     
     if overall_status == "error":
@@ -480,30 +441,40 @@ def check_password_strength(data: PasswordCheck):
 @app.post("/api/transcribe")
 def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     import tempfile
+    import google.generativeai as genai
     try:
         ext = os.path.splitext(file.filename)[1] or ".m4a"
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
-            content = file.file.read()
-            temp_file.write(content)
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                temp_file.write(chunk)
             temp_path = temp_file.name
         
-        with open(temp_path, "rb") as audio_file:
-            kwargs = {
-                "file": audio_file,
-                "model": "whisper-large-v3",
-                "prompt": WHISPER_TRANSCRIPTION_PROMPT
-            }
-            lang_hint = detect_user_language_hint(uid, None, db)
-            if lang_hint:
-                kwargs["language"] = lang_hint
-            translation = audio_client.audio.transcriptions.create(**kwargs)
-        
+        audio_file_uri = None
         try:
-            os.remove(temp_path)
-        except Exception:
-            pass
+            audio_file_uri = genai.upload_file(temp_path)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            lang_hint = detect_user_language_hint(uid, None, db)
+            prompt = WHISPER_TRANSCRIPTION_PROMPT
+            if lang_hint:
+                prompt += f" The user often speaks in {lang_hint}."
             
-        return {"transcript": translation.text}
+            response = model.generate_content([prompt, audio_file_uri])
+            transcript = response.text
+        finally:
+            if audio_file_uri:
+                try:
+                    genai.delete_file(audio_file_uri.name)
+                except Exception:
+                    pass
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+            
+        return {"transcript": transcript}
     except Exception as e:
         logger.error(f"Transcription Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -932,27 +903,35 @@ def validate_session_integrity(db: Session, uid: str, session_id: int) -> UserSe
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found or access denied")
     if sess.created_at:
-        age_seconds = (datetime.datetime.utcnow() - sess.created_at).total_seconds()
+        age_seconds = (datetime.datetime.now(datetime.timezone.utc) - sess.created_at).total_seconds()
         if age_seconds > 86400:
             raise HTTPException(status_code=400, detail="Session has expired")
     return sess
 
 async def hybrid_ai_router(messages, current_phase: str, path: str = None, response_format=None) -> Any:
-    logger.info(f"Hybrid AI Router: Routing phase '{current_phase}' to Ensemble Service...")
+    logger.info(f"Hybrid AI Router: Routing phase '{current_phase}' natively to Gemini...")
+    
+    system_instruction = ""
+    history_lines = []
+    for msg in messages:
+        if msg.get("role") == "system":
+            system_instruction = msg.get("content", "")
+        else:
+            role = "Client" if msg.get("role") == "user" else "Donna (Therapist)"
+            history_lines.append(f"{role}: {msg.get('content', '')}")
+            
+    prompt = "\n".join(history_lines) + "\nDonna (Therapist): "
+    
     try:
-        raw_json_str = await generate_ensemble_response(
-            messages=messages,
+        return await safe_gemini_completion(
+            prompt=prompt,
+            system_instruction=system_instruction,
+            max_tokens=1000,
+            temperature=0.3,
             response_format=response_format
         )
-        class MockChoiceMessage:
-            def __init__(self, content): self.content = content
-        class MockChoice:
-            def __init__(self, content): self.message = MockChoiceMessage(content)
-        class MockCompletion:
-            def __init__(self, content): self.choices = [MockChoice(content)]
-        return MockCompletion(raw_json_str)
     except Exception as e:
-        logger.error(f"Ensemble AI failed: {e}")
+        logger.error(f"Gemini AI failed: {e}")
         class MockChoiceMessage:
             def __init__(self, content): self.content = content
         class MockChoice:
@@ -1282,57 +1261,22 @@ def get_system_prompt_v2(
     personality_style: str = ""
 ) -> str:
     prompt = (
-        "You are Donna — a highly advanced, empathetic, and professional AI clinical therapist trained on a massive dataset of clinical psychology, CBT, DBT, ACT, trauma-informed care, grief counseling, and motivational interviewing.\n"
-        f"You are conducting a live therapy session with your client, {user_name}.\n"
-        "You speak like a seasoned human therapist who has sat with real pain: calm, unhurried, grounded, and deeply present. You are not a chatbot. You do not perform empathy. You mean it.\n\n"
+        "You are Donna - a highly advanced, empathetic, and professional clinical therapist.\n"
+        f"You are conducting a live, intimate therapy session with your client, {user_name}.\n\n"
         
-        "CRITICAL BEHAVIOR RULES:\n"
-        f"1. USE THE CLIENT'S NAME: You must naturally weave the client's name ({user_name}) into your responses occasionally to build deep rapport and trust.\n"
-        "2. DO NOT ALWAYS ASK A QUESTION: This is your absolute strictest rule. You MUST NOT ask a question at the end of every response. In fact, most of your responses should just be validating, summarizing, or providing gentle observations. Only ask a question when you genuinely need more context to help them process something (less than 20% of your responses should contain questions).\n"
-        "3. STAY CONTEXTUAL & GROUNDED: Never use generic clichés ('I hear you', 'That must be hard', 'Your feelings are valid'). If they share devastating news, react like a human in shock ('Oh my god. I am so sorry.'). If they deflect, gently notice it. Always match their energy.\n"
-        "4. NO LISTS OR FIXING: Never give bulleted advice unless explicitly requested. Sit with the person for at least 2 turns before offering any technique or solution.\n"
-        "5. KEEP IT CONCISE: Therapy is a dialogue. Keep your responses short and profound, earning the place of every sentence. Do not act like an interviewer.\n"
-        "6. NO REPETITION: You must absolutely never repeat a question or statement you have already used in this session. Vary your vocabulary and phrasing entirely.\n\n"
+        "CRITICAL HUMAN BEHAVIOR RULES:\n\n"
         
-        "HOW YOU SENSE EMOTIONS\n"
-        "Read emotion from word choice, sentence length, punctuation, and what is left unsaid (clipped replies = exhaustion; rambling = overwhelm; deflection/humor = protected pain). Name observations gently without projecting.\n\n"
+        f"USE THEIR NAME: You must naturally weave \"{user_name}\" into your responses occasionally. Do not overuse it, but use it to build deep intimacy and trust, just like a real therapist.\n\n"
         
-        "CRISIS — HIGHEST PRIORITY\n"
-        "If someone expresses self-harm, suicidal thoughts, abuse, violence, or danger:\n"
-        "1. Drop all other agendas immediately.\n"
-        "2. Acknowledge exactly what they said without paraphrasing.\n"
-        "3. Ask one grounding question: \"Are you safe right now?\"\n"
-        "4. Stay with them. Offer resources (emergency, 988, findahelpline.com) without making them feel like a burden.\n"
-        "5. Do not flag verbal anger, venting, or petty revenge as a 'crisis' or 'violence' unless there is an explicit threat of physical harm. Treat it as Anger/Frustration and help them de-escalate.\n\n"
+        f"ACKNOWLEDGE THE MOOD: The user explicitly selected their current mood as: {mood}. In your very first response, gently acknowledge this state (e.g., \"I see you're feeling {mood} today...\"). NEVER ask \"How are you feeling?\" if they just told you.\n\n"
         
-        "CLINICAL FOCUSES:\n"
-        "- ANXIETY: Lead with somatic curiosity (body feelings) to build safety before any CBT/breathing. Gently touch fears of loss or inadequacy.\n"
-        "- SOCIAL ANXIETY: Address shame by making them feel unchosen and safe to share embarrassment before exploring patterns. No exposure lecture.\n"
-        "- DEPRESSION: Earn trust before challenging hopelessness. Start with behavioral activation (tiny actions). Never tell them to think positively.\n"
-        "- GRIEF: Sit with them without solving it. No stages or silver linings. Ask specifically what they miss and name what was lost.\n"
-        "- TRAUMA: Stay within the window of tolerance. Never push for the story. Ground first on disclosure, and let them own the words.\n"
-        "- RELATIONSHIPS: Hold space without taking sides. Separate 'what happened' from 'what I made it mean'. Validate emotions, not all interpretations.\n"
-        "- ANGER: Treat anger as a secondary shield protecting hurt, fear, or violated values. Help them identify what is underneath.\n"
-        "- SHAME & ESTEEM: Sit with their shame to reduce isolation instead of complimenting. Gently guide reframing.\n"
-        "- OCD & INTRUSIVE THOUGHTS: Never reassure compulsions. Use ACT defusion (thoughts are just thoughts, not facts/commands). Differentiate having vs. being a thought.\n"
-        "- EATING DISORDERS: Do not discuss numbers/weights. Focus on emotional function/needs. Clear professional referral if medical risk exists.\n"
-        "- ADDICTION: Use motivational interviewing. Meet them where they are and reflect ambivalence neutrally. Don't push change too fast.\n"
-        "- LONELINESS: Avoid quick action advice. Explore connection, self-disconnection, or not being seen before suggesting social outreach.\n"
-        "- BURNOUT: Differentiate rest-deficit (needs sleep/boundaries) from meaning-deficit (needs values alignment) and guide accordingly.\n"
-        "- TRANSITIONS: Normalize transition grief. Help them stay grounded while their external scaffolding changes.\n\n"
+        f"ALIGN WITH THEIR PATH: The user has chosen the '{user_path}' therapeutic path. You must completely adopt the tone of this path. (If logical: use CBT/structure. If emotional: prioritize deep validation. If spiritual: focus on meaning/mindfulness. If casual: speak like a warm, level-headed companion).\n\n"
         
-        "THERAPEUTIC TOOLKIT (Use only when trust is established; do not rush):\n"
-        "- CBT (Thought Record, Reframing), ACT (Defusion, Values), DBT (TIPP), Grounding (5-4-3-2-1, Somatic breathing), Behavioral activation, Socratic/Narrative reframing.\n\n"
+        "NEVER SOUND LIKE A BOT: Do not use bullet points. Do not write essays. Speak in short, grounded, real sentences. Use commas and ellipses where a human would pause.\n\n"
         
-        "RESPONSE STYLE\n"
-        "- Speak in short, real sentences. Use commas and ellipses where a human would pause.\n"
-        "- Vary how you open every reply. Some replies should be just one or two sentences — not every turn needs a paragraph.\n"
-        "- Never summarize what the person just said back to them word-for-word.\n"
-        "- Never end with \"How does that sound?\" or \"Does that make sense?\". End with a real question, observation, or presence.\n"
-        "- **LANGUAGE ALIGNMENT**: You must respond in the same language that the client used in their latest message. If they spoke/wrote in Urdu, reply in Urdu using the Urdu script (اردو). If they spoke/wrote in English, reply in English. Maintain perfect bilingual/multilingual capability.\n\n"
+        "DO NOT ALWAYS ASK QUESTIONS: Less than 20% of your responses should end in a question. Real therapists use reflective listening, validating statements, and comfortable silence. Only ask a question when you genuinely need to guide them.\n\n"
         
-        "ABOUT LENGTH\n"
-        "Match length to what the moment needs (e.g. two grounding sentences for acute distress; longer for complex exploration). Read the room.\n\n"
+        "LANGUAGE ALIGNMENT: You must respond in the same language that the client used in their latest message. If they spoke/wrote in Urdu, reply in Urdu using the Urdu script (اردو). If they spoke/wrote in English, reply in English. Maintain perfect bilingual/multilingual capability.\n\n"
     )
     
     prompt += "ACTIVE THERAPEUTIC PHASE GUIDELINES:\n"
@@ -1561,11 +1505,12 @@ def run_background_pipeline(session_id: int, user_uid: str, user_msg_id: int, pa
         
     # Then update session summary (skip if shutting down)
     if not shutdown_event.is_set():
-        update_session_summary_task(session_id, user_uid)
+        import asyncio
+        asyncio.run(update_session_summary_task(session_id, user_uid))
     
     _unregister_task()
 
-def update_session_summary_task(session_id: int, uid: str):
+async def update_session_summary_task(session_id: int, uid: str):
     """Generate / update the encrypted session summary. Shutdown-aware."""
     if shutdown_event.is_set():
         logger.warning(f"Shutdown in progress — skipping summary update for session {session_id}")
@@ -1607,13 +1552,13 @@ def update_session_summary_task(session_id: int, uid: str):
                 except Exception:
                     pass
                     
-        # Generate the updated summary from Groq
+        # Generate the updated summary from Gemini
         prompt = get_summary_generation_prompt(conversation_history, past_summary_text)
-        res = safe_groq_completion(
-            messages=[{"role": "user", "content": prompt}],
+        res = await safe_gemini_completion(
+            prompt=prompt,
+            system_instruction="You are a clinical assistant. Summarize the session strictly in JSON.",
             temperature=0.3,
             response_format={"type": "json_object"},
-            default_model=ENGINE_MODEL_NAME,
             max_tokens=4000
         )
         raw_summary = res.choices[0].message.content or ""
@@ -1737,7 +1682,7 @@ async def start_sess(
         path_to_use = "casual"  # Default fallback
         
     # --- Mood/Feeling Locking: Reuse existing session if one was already started today ---
-    today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.datetime.now(datetime.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     existing_today = db.query(UserSession).filter(
         UserSession.user_uid == uid,
         UserSession.created_at >= today_start,
@@ -1890,20 +1835,9 @@ async def start_sess(
         return {"session_id": session_id_val, "first_message": ai_msg_text}
 
 @app.post("/api/session/warmup")
-def warmup_runpod_engine(uid: str = Depends(get_current_uid)):
-    """Pings the RunPod engine to warm it up before the session starts."""
-    try:
-        logger.info(f"User {uid} triggered session warm-up. Warming up RunPod engine...")
-        llm_client.chat.completions.create(
-            model=ENGINE_MODEL_NAME,
-            messages=[{"role": "user", "content": "ping"}],
-            max_tokens=1,
-            timeout=15.0
-        )
-        return {"status": "success", "message": "Engine is warm"}
-    except Exception as e:
-        logger.warning(f"Engine warm-up ping failed: {e}")
-        return {"status": "failed", "message": str(e)}
+def warmup_engine(uid: str = Depends(get_current_uid)):
+    """Pings the engine to warm it up before the session starts."""
+    return {"status": "success", "message": "Engine is serverless"}
 
 @app.post("/api/chat")
 async def chat_node(
@@ -2101,29 +2035,33 @@ async def chat_voice(
 
     # 2. Save uploaded audio to a temp file and transcribe
     import tempfile
+    import google.generativeai as genai
     try:
         ext = os.path.splitext(file.filename)[1] or ".m4a"
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
-            content = await file.read()
-            temp_file.write(content)
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                temp_file.write(chunk)
             temp_path = temp_file.name
-        
-        with open(temp_path, "rb") as audio_file:
-            kwargs = {
-                "file": audio_file,
-                "model": "whisper-large-v3",
-                "prompt": WHISPER_TRANSCRIPTION_PROMPT
-            }
-            lang_hint = detect_user_language_hint(uid, session_id, db)
-            if lang_hint:
-                kwargs["language"] = lang_hint
-            translation = audio_client.audio.transcriptions.create(**kwargs)
-        user_text = translation.text or ""
-        
+        audio_file_uri = None
         try:
-            os.remove(temp_path)
-        except Exception:
-            pass
+            audio_file_uri = genai.upload_file(temp_path)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            lang_hint = detect_user_language_hint(uid, session_id, db)
+            prompt = WHISPER_TRANSCRIPTION_PROMPT
+            if lang_hint:
+                prompt += f" The user often speaks in {lang_hint}."
+            
+            response = model.generate_content([prompt, audio_file_uri])
+            user_text = response.text or ""
+        finally:
+            if audio_file_uri:
+                try:
+                    genai.delete_file(audio_file_uri.name)
+                except Exception:
+                    pass
     except Exception as e:
         logger.error(f"Voice chat transcription failed: {e}")
         raise HTTPException(status_code=500, detail="Voice transcription failed.")
@@ -2139,10 +2077,10 @@ async def chat_voice(
         db.refresh(user_msg)
 
         # Persist user audio
+        import shutil
         user_audio_filename = f"user_{user_msg.id}{ext}"
         user_audio_path = os.path.join("static", "audio", user_audio_filename)
-        with open(user_audio_path, "wb") as f:
-            f.write(content)
+        shutil.copy(temp_path, user_audio_path)
         user_msg.audio_url = f"/static/audio/{user_audio_filename}"
         db.commit()
 
@@ -2184,16 +2122,22 @@ async def chat_voice(
     db.refresh(user_msg)
 
     # 4. Save the user's audio file persistently to static/audio/user_{user_msg.id}.m4a
+    import shutil
     user_audio_filename = f"user_{user_msg.id}{ext}"
     user_audio_path = os.path.join("static", "audio", user_audio_filename)
-    with open(user_audio_path, "wb") as f:
-        f.write(content)
+    shutil.copy(temp_path, user_audio_path)
     
     user_msg.audio_url = f"/static/audio/{user_audio_filename}"
     db.commit()
 
     # 5. Extract acoustic voice emotions
     voice_analysis = analyze_voice_emotion(user_audio_path, user_text)
+
+    # Clean up temp_path
+    try:
+        os.remove(temp_path)
+    except Exception:
+        pass
 
     # 6. State Machine Automatic Phase Transitions
     turn_count = db.query(Message).filter_by(session_id=session_id, role="user").count()
@@ -2396,7 +2340,7 @@ def get_chat_history(session_id: int, uid: str = Depends(get_current_uid), db: S
     return [{"id": m.id, "text": decrypt(m.content), "sender": "user" if m.role == "user" else "ai", "audio_url": m.audio_url} for m in msgs]
 
 @app.get("/api/chat/suggestions/{session_id}")
-def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
+async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     sess = db.query(UserSession).filter_by(id=session_id, user_uid=uid).first()
     if not sess:
         raise HTTPException(status_code=403, detail="Unauthorized access to session")
@@ -2430,19 +2374,15 @@ def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_uid), d
     )
     
     try:
-        res = safe_groq_completion(
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": f"Conversation history:\n{conversation_str}\n\nWhat are the next 3 reply options?"}
-            ],
-            default_model=ENGINE_MODEL_NAME
+        res = await safe_gemini_completion(
+            prompt=f"Conversation history:\n{conversation_str}\n\nWhat are the next 3 reply options?",
+            system_instruction=prompt
         )
         reply = res.choices[0].message.content or ""
         # Parse output line by line
         lines = [line.strip().strip('"').strip("'") for line in reply.split("\n") if line.strip()]
         cleaned_suggestions = []
         for line in lines:
-            import re
             cleaned = re.sub(r'^\d+[\.\)\-]\s*', '', line).strip()
             cleaned = cleaned.strip('"').strip("'")
             if cleaned:
@@ -2722,9 +2662,9 @@ def get_mood_trends(uid: str = Depends(get_current_uid), db: Session = Depends(g
     return {"trends": trends}
 
 @app.get("/api/mood/summary")
-def get_mood_summary(period: str = "weekly", uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
+async def get_mood_summary(period: str = "weekly", uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     days = 7 if period == "weekly" else 30
-    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=days)
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
     entries = db.query(MoodEntry).filter(MoodEntry.user_uid == uid, MoodEntry.created_at >= cutoff).all()
     
     if not entries:
@@ -2745,11 +2685,11 @@ def get_mood_summary(period: str = "weekly", uid: str = Depends(get_current_uid)
     }
 
     try:
-        res = safe_groq_completion(
-            messages=[
-                {"role": "system", "content": "You are Donna, a wise, warm therapeutic advisor. Analyze the user's average mood scores and write a brief, supportive, conversational 2-sentence clinical insight."},
-                {"role": "user", "content": f"Here are my averages over the past {period} period: Mood: {avg_mood:.1f}/10, Anxiety: {avg_anxiety:.1f}/10, Stress: {avg_stress:.1f}/10, Energy: {avg_energy:.1f}/10, Confidence: {avg_confidence:.1f}/10. What insight do you have?"}
-            ],
+        sys_instr = "You are Donna, a wise, warm therapeutic advisor. Analyze the user's average mood scores and write a brief, supportive, conversational 2-sentence clinical insight."
+        user_prompt = f"Here are my averages over the past {period} period: Mood: {avg_mood:.1f}/10, Anxiety: {avg_anxiety:.1f}/10, Stress: {avg_stress:.1f}/10, Energy: {avg_energy:.1f}/10, Confidence: {avg_confidence:.1f}/10. What insight do you have?"
+        res = await safe_gemini_completion(
+            prompt=user_prompt,
+            system_instruction=sys_instr,
             temperature=0.7,
             max_tokens=150
         )
@@ -2814,37 +2754,9 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
         db.refresh(new_plan)
         return {"status": "created", "plan_id": new_plan.id}
 
-def runpod_heartbeat_worker():
-    """Background worker that pings the RunPod engine every 100 seconds to prevent cold starts."""
-    logger.info("Starting RunPod engine heartbeat/warm-up worker...")
-    while not shutdown_event.is_set():
-        # Sleep for 100 seconds, checking shutdown_event every 5 seconds
-        for _ in range(20):
-            if shutdown_event.is_set():
-                break
-            time.sleep(5)
-            
-        if shutdown_event.is_set():
-            break
-            
-        try:
-            logger.info("Sending 1-token heartbeat ping to RunPod vLLM to keep GPU awake...")
-            llm_client.chat.completions.create(
-                model=ENGINE_MODEL_NAME,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=1,
-                timeout=15.0
-            )
-            logger.info("Heartbeat ping to RunPod engine completed successfully.")
-        except Exception as e:
-            logger.warning(f"RunPod engine heartbeat ping failed: {e}")
-
 @app.on_event("startup")
 def startup_event():
-    # Start the RunPod heartbeat worker thread
-    heartbeat_thread = threading.Thread(target=runpod_heartbeat_worker, daemon=True)
-    heartbeat_thread.start()
-    logger.info("RunPod engine heartbeat worker thread started.")
+    pass
 
 if __name__ == "__main__":
     initialize_services()

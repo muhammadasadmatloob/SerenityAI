@@ -1238,9 +1238,7 @@ export default function ChatScreen() {
     <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
       {/* HEADER */}
       <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-100 bg-transparent">
-        <TouchableOpacity onPress={handleBack}>
-          <ChevronLeft size={28} color="#4A55A2" />
-        </TouchableOpacity>
+        {/* Back button removed */}
         <Text className="text-xl font-bold text-gray-800">Donna.Ai</Text>
         <View className="flex-row items-center gap-5">
           <TouchableOpacity onPress={startCall} disabled={sessionFinished}>

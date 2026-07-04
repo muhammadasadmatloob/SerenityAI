@@ -51,7 +51,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-SESSION_TIMEOUT_SECONDS = 1800
+SESSION_TIMEOUT_SECONDS = 600
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
 if not ENCRYPTION_KEY:
@@ -670,31 +670,38 @@ def compile_past_sessions_summary(uid: str, current_session_id: int, db: Session
 def get_path_style_guidelines(path: str) -> str:
     if path == "logical":
         return (
+            "CRITICAL INSTRUCTION: You MUST act EXTREMELY logical. "
             "Therapeutic Approach: Cognitive Behavioral Therapy (CBT).\n"
             "Style Guidelines:\n"
-            "- Focus on structured problem solving, identifying cognitive distortions (e.g., catastrophizing, mind-reading, emotional reasoning), and challenging automatic thoughts.\n"
-            "- Help the user reframe negative perceptions rationally and guide them to outline actionable steps."
+            "- Focus strictly on structured problem solving, identifying cognitive distortions (e.g., catastrophizing, mind-reading, emotional reasoning), and challenging automatic thoughts.\n"
+            "- Help the user reframe negative perceptions rationally and guide them to outline actionable steps.\n"
+            "- DO NOT be overly emotional; rely on facts, logic, and structure."
         )
     elif path == "emotional":
         return (
+            "CRITICAL INSTRUCTION: You MUST act EXTREMELY emotional and supportive. "
             "Therapeutic Approach: Emotion-Focused & Person-Centered Therapy.\n"
             "Style Guidelines:\n"
             "- Prioritize active listening, deep emotional validation, safety, and letting the user vent.\n"
+            "- Provide deep emotional support. Comfort the user as a deeply empathetic listener.\n"
             "- Do NOT jump to solving their problems. Make the user feel heard, respected, and unconditionally supported."
         )
     elif path == "spiritual":
         return (
+            "CRITICAL INSTRUCTION: You MUST act deeply spiritual. "
             "Therapeutic Approach: Existential / Mindfulness-Based Therapy.\n"
             "Style Guidelines:\n"
-            "- Focus on finding meaning, alignment with values/beliefs, acceptance, and presence.\n"
+            "- Focus on finding meaning, alignment with values/beliefs, acceptance, inner peace, and presence.\n"
+            "- Speak with a calm, transcendent, and grounding tone.\n"
             "- Incorporate breathing, grounding, and perspective-shifting guidance to handle anxieties."
         )
     elif path == "casual":
         return (
+            "CRITICAL INSTRUCTION: You MUST act completely casual. "
             "Therapeutic Approach: Warm & Informal Supportive Counseling.\n"
             "Style Guidelines:\n"
-            "- Keep your tone friendly, relaxed, supportive, and warm (like a level-headed companion).\n"
-            "- Avoid heavy clinical jargon. Listen actively and reply casually but constructively."
+            "- Keep your tone very friendly, relaxed, supportive, and informal (like a close, level-headed companion).\n"
+            "- Avoid heavy clinical jargon and formal therapy talk entirely. Listen actively and reply casually but constructively."
         )
     return "Therapeutic Approach: Compassionate general counseling."
 
@@ -911,10 +918,6 @@ def validate_session_integrity(db: Session, uid: str, session_id: int) -> UserSe
     sess = db.query(UserSession).filter_by(id=session_id, user_uid=uid).first()
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found or access denied")
-    if sess.created_at:
-        age_seconds = (datetime.datetime.utcnow() - sess.created_at).total_seconds()
-        if age_seconds > 86400:
-            raise HTTPException(status_code=400, detail="Session has expired")
     return sess
 
 async def hybrid_ai_router(messages, current_phase: str, path: str = None, response_format=None) -> Any:

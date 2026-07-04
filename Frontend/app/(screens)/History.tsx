@@ -1,12 +1,12 @@
 import { MotiView } from "moti";
 import React, { useState, useCallback } from "react";
-import { ScrollView, Text, View, ActivityIndicator, RefreshControl, TouchableOpacity, Alert, StyleSheet } from "react-native";
+import { ScrollView, Text, View, ActivityIndicator, RefreshControl, TouchableOpacity, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
 import { Trash2 } from "lucide-react-native";
 import { useRouter, useFocusEffect } from "expo-router";
-import { LinearGradient } from "expo-linear-gradient";
+
 
 const moodMap: Record<string, string> = {
   anxious: "😰",

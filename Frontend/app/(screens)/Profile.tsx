@@ -1,12 +1,10 @@
-import { signOut } from "firebase/auth";
-import { ChevronRight, User, LogOut, Settings } from "lucide-react-native";
+import { ChevronRight, User, LogOut, Settings, ShieldCheck } from "lucide-react-native";
 import React, { useState, useCallback } from "react";
-import { Alert, Image, Text, TouchableOpacity, View, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
+import { Image, Text, TouchableOpacity, View, ScrollView, ActivityIndicator, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
-import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { BACKEND_URL } from "../../constants/config";
-import { ShieldCheck } from "lucide-react-native";
 
 const moodMap: Record<string, string> = {
   anxious: "😰",

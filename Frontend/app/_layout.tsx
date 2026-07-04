@@ -74,7 +74,7 @@ export default function RootLayout() {
   const [hasAcceptedPrivacy, setHasAcceptedPrivacy] = useState<boolean | null>(null);
   const [networkError, setNetworkError] = useState<boolean>(false);
   const [retryTrigger, setRetryTrigger] = useState(0);
-  const [splashMessage, setSplashMessage] = useState("Your personal AI therapist");
+  const [splashMessage] = useState("Your personal AI therapist");
   const [user, setUser] = useState<any>(null);
   const unsubSnap = useRef<(() => void) | null>(null);
 
@@ -217,7 +217,7 @@ export default function RootLayout() {
     const inAuthGroup = segments[0] === "(auth)";
     const onVerifyScreen = currentScreen === "EmailVerify";
     const onInfoScreen = currentScreen === "Info";
-    const onPrivacyScreen = currentScreen === "index" || segments.length === 0;
+    const onPrivacyScreen = (currentScreen as string) === "index" || (segments.length as number) === 0;
 
     if (!hasAcceptedPrivacy) {
       if (!onPrivacyScreen) router.replace("/");
@@ -235,6 +235,7 @@ export default function RootLayout() {
       const isOnSetupScreen = inAuthGroup || onVerifyScreen || onInfoScreen || onPrivacyScreen;
       if (isOnSetupScreen) router.replace("/(screens)/Feel");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAppReady, isProfileComplete, segments, networkError, user, hasAcceptedPrivacy]);
 
   if (!isAppReady) return null;

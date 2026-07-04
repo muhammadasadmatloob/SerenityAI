@@ -1,4 +1,4 @@
-import { LinearGradient } from "expo-linear-gradient";
+
 import { Stack, useRouter, useLocalSearchParams } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { CheckCircle2, Circle } from "lucide-react-native";
@@ -6,8 +6,6 @@ import { MotiView } from "moti";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
-  Image,
   Pressable,
   ScrollView,
   Text,
@@ -16,7 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
 
-const { width } = Dimensions.get("window");
+
 
 export default function PrivacyScreen() {
   const router = useRouter();

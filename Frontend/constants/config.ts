@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import * as Network from 'expo-network';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform, AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus } from 'react-native';
 import * as Linking from 'expo-linking';
 
 const STORAGE_KEY = "SERENITY_BACKEND_URL";

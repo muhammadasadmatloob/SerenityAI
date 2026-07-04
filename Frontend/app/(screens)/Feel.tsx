@@ -4,8 +4,6 @@ import { Mic, X, Sparkles } from "lucide-react-native";
 import { MotiView } from "moti";
 import React, { useState, useEffect } from "react"; 
 import {
-  Dimensions,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -107,7 +105,7 @@ export default function FeelScreen() {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` }
           }).catch((err) => console.log("⚠️ Feel: RunPod warm-up silent fail:", err));
-        } catch (err) {}
+        } catch {}
       } else {
         setUserPath(null);
       }

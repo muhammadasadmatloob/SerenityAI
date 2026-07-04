@@ -1,8 +1,8 @@
-import { LinearGradient } from "expo-linear-gradient";
+
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { BrainCircuit, ChevronLeft, Coffee, HeartHandshake, Wand2 } from "lucide-react-native";
 import React, { useState, useEffect } from "react";
-import { StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native";
+import { Text, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
 import SupportCard from "../(components)/card";

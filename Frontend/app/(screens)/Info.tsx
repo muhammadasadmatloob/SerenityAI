@@ -1,6 +1,6 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Location from "expo-location";
-import { Stack, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import React, { useState, useRef } from "react";
 import {
   ActivityIndicator,
@@ -13,7 +13,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Keyboard,
   Modal
 } from "react-native";
 import { WebView } from "react-native-webview";
@@ -23,7 +22,6 @@ import { BACKEND_URL } from "../../constants/config";
 import { saveUserInfo } from "../../firebase/firebaseConfig";
 
 export default function InfoScreen() {
-  const router = useRouter();
   const scrollRef = useRef<ScrollView>(null);
 
   const [name, setName] = useState("");
@@ -272,7 +270,7 @@ export default function InfoScreen() {
               <Text className="text-4xl font-light text-[#1A1C1E] tracking-tight">
                 Hello, <Text className="font-bold text-[#808CEA]">Friend</Text>
               </Text>
-              <Text className="text-gray-400 text-sm mt-2 text-center">Let's set up your profile to begin</Text>
+              <Text className="text-gray-400 text-sm mt-2 text-center">Let&apos;s set up your profile to begin</Text>
             </View>
 
             <View className="space-y-4">

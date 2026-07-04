@@ -93,7 +93,7 @@ export default function ProfileInfoScreen() {
   let nameY = 0;
   let genderY = 0;
   let eNameY = 0;
-  let ePhoneY = 0;
+
 
   return (
     <SafeAreaView className="flex-1 bg-white">

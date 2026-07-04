@@ -1,8 +1,8 @@
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { ChevronLeft, Send, LogOut, Phone, PhoneOff, Volume2, VolumeX, Mic, MicOff, Play, Pause } from "lucide-react-native";
+import { Send, LogOut, Phone, PhoneOff, Volume2, VolumeX, Mic, MicOff, Play, Pause } from "lucide-react-native";
 import { MotiView } from "moti";
 import React, { useState, useEffect, useRef } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, ActivityIndicator, Alert, Modal, Dimensions, Keyboard } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, Alert, Modal, Keyboard } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
@@ -136,6 +136,7 @@ const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sende
       }, 300);
       return () => clearTimeout(timer);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shouldAutoplay]);
 
   useEffect(() => {
@@ -260,7 +261,6 @@ export default function ChatScreen() {
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [userSpeechText, setUserSpeechText] = useState("");
-  const [aiSpeechText, setAiSpeechText] = useState("");
   const [callRecording, setCallRecording] = useState<Audio.Recording | null>(null);
   const [callSound, setCallSound] = useState<Audio.Sound | null>(null);
   const [callDuration, setCallDuration] = useState(0);
@@ -274,12 +274,10 @@ export default function ChatScreen() {
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Confirmation mode states and refs
-  const [isWaitingForConfirmation, setIsWaitingForConfirmation] = useState(false);
   const waitingForConfirmationRef = useRef(false);
   const accumulatedTranscriptRef = useRef("");
 
   const updateConfirmationState = (val: boolean) => {
-    setIsWaitingForConfirmation(val);
     waitingForConfirmationRef.current = val;
   };
 
@@ -364,7 +362,7 @@ export default function ChatScreen() {
         }
         Alert.alert("Error", data.message || "Failed to load chat history.");
       }
-    } catch (e) {
+    } catch {
       console.log("History Load Error");
       Alert.alert("Connection Error", "Donna could not be reached to load history.");
     }
@@ -464,6 +462,7 @@ export default function ChatScreen() {
 
   useEffect(() => {
     initChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawSessionId]);
 
   // Active Timer to count seconds while user is using the chat
@@ -486,6 +485,7 @@ export default function ChatScreen() {
     }, 1000);
 
     return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionFinished, activeId, isCallActive, sessionCap]);
 
   // Periodically sync duration to backend database (every 15 seconds)
@@ -501,7 +501,7 @@ export default function ChatScreen() {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ session_id: Number(activeId), duration_seconds: secondsActive })
         });
-      } catch (err) {
+      } catch {
         console.log("Failed to sync session duration");
       }
     }, 15000);
@@ -569,14 +569,9 @@ export default function ChatScreen() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ session_id: Number(activeId), duration_seconds: secondsActive })
       });
-    } catch (e) {
+    } catch {
       console.log("Final duration sync failed");
     }
-  };
-
-  const handleBack = async () => {
-    await syncFinalDuration();
-    router.back();
   };
 
   const handleEnd = async () => {
@@ -656,7 +651,7 @@ export default function ChatScreen() {
         }
         Alert.alert("Error", data.message || "Failed to send message.");
       }
-    } catch (e) {
+    } catch {
       setHistory((prev) => prev.filter((msg) => msg.id !== tempUserId));
       Alert.alert("Connection Error", "Donna could not be reached.");
     } finally {
@@ -692,7 +687,6 @@ export default function ChatScreen() {
       isCallActiveRef.current = true;
       setCallStatus("connecting");
       setUserSpeechText("");
-      setAiSpeechText("");
       updateConfirmationState(false);
       accumulatedTranscriptRef.current = "";
 
@@ -713,13 +707,12 @@ export default function ChatScreen() {
     try {
       // Keep state as thinking/loading while preparing audio to avoid empty speaking screen
       setCallStatus("thinking");
-      setAiSpeechText(text);
       setDisplayedAiSpeechText("");
 
       if (callSound) {
         try {
           await callSound.unloadAsync();
-        } catch (e) {}
+        } catch {}
       }
 
       if (typingIntervalRef.current) {
@@ -816,7 +809,7 @@ export default function ChatScreen() {
       if (prevRec) {
         try {
           await prevRec.stopAndUnloadAsync();
-        } catch (e) {}
+        } catch {}
         activeRecordingRef.current = null;
       }
       setCallRecording(null);
@@ -1010,7 +1003,7 @@ export default function ChatScreen() {
       if (callRecording) {
         try {
           await callRecording.stopAndUnloadAsync();
-        } catch (e) {}
+        } catch {}
         activeRecordingRef.current = null;
         setCallRecording(null);
       }
@@ -1051,7 +1044,7 @@ export default function ChatScreen() {
     if (callRecording) {
       try {
         await callRecording.stopAndUnloadAsync();
-      } catch (e) {}
+      } catch {}
       activeRecordingRef.current = null;
       setCallRecording(null);
     }
@@ -1059,7 +1052,7 @@ export default function ChatScreen() {
     if (callSound) {
       try {
         await callSound.unloadAsync();
-      } catch (e) {}
+      } catch {}
       setCallSound(null);
     }
 
@@ -1070,7 +1063,7 @@ export default function ChatScreen() {
         staysActiveInBackground: false,
         playThroughEarpieceAndroid: false,
       });
-    } catch (e) {}
+    } catch {}
   };
 
   const handleStartVoiceRecording = async () => {
@@ -1117,7 +1110,7 @@ export default function ChatScreen() {
     if (rec) {
       try {
         await rec.stopAndUnloadAsync();
-      } catch (e) {}
+      } catch {}
       voiceMsgRecordingRef.current = null;
     }
     setIsVoiceRecording(false);

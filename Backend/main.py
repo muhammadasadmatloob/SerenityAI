@@ -38,6 +38,7 @@ from database import (
 from voice_analyzer import analyze_voice_emotion
 from semantic_memory import add_semantic_memory, retrieve_semantic_memories
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 load_dotenv()
 
 # --- LOGGING ---
@@ -184,10 +185,18 @@ async def safe_gemini_completion(prompt: str, system_instruction: str, max_token
     if response_format and response_format.get("type") == "json_object":
         generation_config_args["response_mime_type"] = "application/json"
         
+    safety_settings = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }
+        
     model = genai.GenerativeModel(
         model_name="gemini-1.5-flash",
         system_instruction=system_instruction,
-        generation_config=genai.types.GenerationConfig(**generation_config_args)
+        generation_config=genai.types.GenerationConfig(**generation_config_args),
+        safety_settings=safety_settings
     )
     
     try:
@@ -903,7 +912,7 @@ def validate_session_integrity(db: Session, uid: str, session_id: int) -> UserSe
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found or access denied")
     if sess.created_at:
-        age_seconds = (datetime.datetime.now(datetime.timezone.utc) - sess.created_at).total_seconds()
+        age_seconds = (datetime.datetime.utcnow() - sess.created_at).total_seconds()
         if age_seconds > 86400:
             raise HTTPException(status_code=400, detail="Session has expired")
     return sess
@@ -1682,7 +1691,7 @@ async def start_sess(
         path_to_use = "casual"  # Default fallback
         
     # --- Mood/Feeling Locking: Reuse existing session if one was already started today ---
-    today_start = datetime.datetime.now(datetime.timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     existing_today = db.query(UserSession).filter(
         UserSession.user_uid == uid,
         UserSession.created_at >= today_start,
@@ -2664,7 +2673,7 @@ def get_mood_trends(uid: str = Depends(get_current_uid), db: Session = Depends(g
 @app.get("/api/mood/summary")
 async def get_mood_summary(period: str = "weekly", uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     days = 7 if period == "weekly" else 30
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    cutoff = datetime.datetime.utcnow() - datetime.timedelta(days=days)
     entries = db.query(MoodEntry).filter(MoodEntry.user_uid == uid, MoodEntry.created_at >= cutoff).all()
     
     if not entries:

@@ -8,8 +8,6 @@ cryptography
 requests
 edge-tts
 python-multipart
-anyio
-arq
-redis
+
 httpx
 google-generativeai

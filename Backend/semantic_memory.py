@@ -3,11 +3,10 @@ import uuid
 import json
 import math
 from typing import List, Dict, Any, Optional
-from fastembed import TextEmbedding
+import google.generativeai as genai
 from database import SessionLocal, SemanticMemory
 
-# Initialize fastembed Model (runs locally on CPU, module level is fine)
-embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+# We use Gemini's text-embedding-004 model now.
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
     dot_product = sum(x * y for x, y in zip(v1, v2))
@@ -36,8 +35,12 @@ def add_semantic_memory(
     
     # 1. Generate text embedding
     try:
-        embeddings = list(embedding_model.embed([content]))
-        vector = [float(x) for x in embeddings[0]]
+        response = genai.embed_content(
+            model="models/text-embedding-004",
+            content=content,
+            task_type="retrieval_document",
+        )
+        vector = response['embedding']
     except Exception as e:
         print(f"Failed to generate embedding for memory: {e}")
         return False
@@ -103,8 +106,12 @@ def retrieve_semantic_memories(user_uid: str, query: str, limit: int = 5) -> Lis
         return []
 
     try:
-        embeddings = list(embedding_model.embed([query.strip()]))
-        vector = [float(x) for x in embeddings[0]]
+        response = genai.embed_content(
+            model="models/text-embedding-004",
+            content=query.strip(),
+            task_type="retrieval_query",
+        )
+        vector = response['embedding']
     except Exception as e:
         print(f"Failed to generate embedding for retrieval query: {e}")
         return []

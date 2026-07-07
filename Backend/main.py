@@ -1519,7 +1519,7 @@ def run_background_pipeline(session_id: int, user_uid: str, user_msg_id: int, pa
     # Then update session summary (skip if shutting down, and rate-limit to every 3rd message)
     if not shutdown_event.is_set():
         from database import SessionLocal
-        from models import Message
+        from database import Message
         db_check = SessionLocal()
         try:
             turn_count = db_check.query(Message).filter_by(session_id=session_id, role="user").count()

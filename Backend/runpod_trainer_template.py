@@ -1,9 +1,9 @@
 import os
-import runpod
-from unsloth import FastLanguageModel
-from trl import SFTTrainer
-from transformers import TrainingArguments
-from datasets import Dataset
+import runpod # type: ignore
+from unsloth import FastLanguageModel # type: ignore
+from trl import SFTTrainer # type: ignore
+from transformers import TrainingArguments # type: ignore
+from datasets import Dataset # type: ignore
 import torch
 
 # Configuration for Phi-3

@@ -193,7 +193,7 @@ async def safe_gemini_completion(prompt: str, system_instruction: str, max_token
     }
         
     model = genai.GenerativeModel(
-        model_name="gemini-3.5-flash",
+        model_name="gemini-flash-latest",
         system_instruction=system_instruction,
         generation_config=genai.types.GenerationConfig(**generation_config_args),
         safety_settings=safety_settings
@@ -460,7 +460,7 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
             temp_path = temp_file.name
         
         try:
-            model = genai.GenerativeModel("gemini-3.5-flash")
+            model = genai.GenerativeModel("gemini-flash-latest")
             lang_hint = detect_user_language_hint(uid, None, db)
             prompt = WHISPER_TRANSCRIPTION_PROMPT
             if lang_hint:
@@ -2072,7 +2072,7 @@ async def chat_voice(
                 temp_file.write(chunk)
             temp_path = temp_file.name
         try:
-            model = genai.GenerativeModel("gemini-3.5-flash")
+            model = genai.GenerativeModel("gemini-flash-latest")
             lang_hint = detect_user_language_hint(uid, session_id, db)
             prompt = WHISPER_TRANSCRIPTION_PROMPT
             if lang_hint:

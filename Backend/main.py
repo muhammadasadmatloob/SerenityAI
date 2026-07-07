@@ -1516,10 +1516,21 @@ def run_background_pipeline(session_id: int, user_uid: str, user_msg_id: int, pa
     finally:
         db.close()
         
-    # Then update session summary (skip if shutting down)
+    # Then update session summary (skip if shutting down, and rate-limit to every 3rd message)
     if not shutdown_event.is_set():
-        import asyncio
-        asyncio.run(update_session_summary_task(session_id, user_uid))
+        from database import SessionLocal
+        from models import Message
+        db_check = SessionLocal()
+        try:
+            turn_count = db_check.query(Message).filter_by(session_id=session_id, role="user").count()
+            # Only run the heavy LLM summary every 3 turns to strictly stay under 5 RPM Gemini limits
+            if turn_count % 3 == 0:
+                import asyncio
+                asyncio.run(update_session_summary_task(session_id, user_uid))
+        except Exception as e:
+            logger.error(f"Error checking turn count for summary: {e}")
+        finally:
+            db_check.close()
     
     _unregister_task()
 

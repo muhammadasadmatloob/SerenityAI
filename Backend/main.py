@@ -40,8 +40,7 @@ from database import (
 )
 from voice_analyzer import analyze_voice_emotion
 from semantic_memory import add_semantic_memory, retrieve_semantic_memories
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
 load_dotenv()
 
 # --- LOGGING ---

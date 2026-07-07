@@ -2848,7 +2848,7 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
         db.refresh(new_plan)
         return {"status": "created", "plan_id": new_plan.id}
 
-from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.schedulers.background import BackgroundScheduler # type: ignore
 
 def run_daily_fine_tuning():
     logger.info("Running daily fine tuning export...")

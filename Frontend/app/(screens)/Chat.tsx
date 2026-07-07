@@ -1245,7 +1245,7 @@ export default function ChatScreen() {
       {/* HEADER */}
       <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-100 bg-transparent">
         {/* Back button removed */}
-        <Text className="text-xl font-bold text-gray-800">Donna.Ai</Text>
+        <Text className="text-xl font-bold text-gray-800">DONNA AI</Text>
         <View className="flex-row items-center gap-5">
           <TouchableOpacity onPress={startCall} disabled={sessionFinished}>
             <Phone size={22} color={sessionFinished ? "#D1D5DB" : "#55C5CC"} />

@@ -39,10 +39,10 @@ const SupportCard = ({
         <View className="mb-2">
           <Icon size={40} color={isSelected ? "#808CEA" : "#55C5CC"} strokeWidth={1.5} />
         </View>
-        <Text className="text-slate-900 font-extrabold text-[15px] text-center mb-1">
+        <Text className={`font-extrabold text-[15px] text-center mb-1 ${isSelected ? 'text-slate-900' : 'text-white'}`}>
           {title}
         </Text>
-        <Text className="text-slate-700 font-medium text-[11px] text-center leading-4">
+        <Text className={`font-medium text-[11px] text-center leading-4 ${isSelected ? 'text-slate-700' : 'text-slate-200'}`}>
           {description}
         </Text>
       </MotiView>

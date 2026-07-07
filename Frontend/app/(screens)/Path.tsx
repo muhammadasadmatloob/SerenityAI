@@ -1,8 +1,9 @@
 
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { BrainCircuit, ChevronLeft, Coffee, HeartHandshake, Wand2 } from "lucide-react-native";
 import React, { useState, useEffect } from "react";
-import { Text, TouchableOpacity, View, Alert, ActivityIndicator } from "react-native";
+import { Text, TouchableOpacity, View, Alert, ActivityIndicator, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
 import SupportCard from "../(components)/card";
@@ -91,6 +92,7 @@ export default function PathScreen() {
 
   return (
     <View className="flex-1">
+      <LinearGradient colors={["#0F172A", "#1E1B4B", "#312E81"]} style={StyleSheet.absoluteFill} />
       <SafeAreaView className="flex-1">
         <View className="px-6 py-2"><TouchableOpacity onPress={() => router.back()}><ChevronLeft size={32} color="white" /></TouchableOpacity></View>
         <View className="flex-1 px-6 justify-center">
@@ -106,7 +108,7 @@ export default function PathScreen() {
             }}
             className="p-6 rounded-[40px] items-center"
           >
-            <Text className="text-black text-3xl font-bold text-center mb-6">Choosing Your Path</Text>
+            <Text className="text-white text-3xl font-bold text-center mb-6">Choosing Your Path</Text>
             <View className="flex-row flex-wrap justify-between gap-y-4 mb-10 w-full">
               {SUPPORT_PATHS.map((path) => (
                 <SupportCard key={path.id} title={path.title} description={path.description} Icon={path.icon} isSelected={selectedPath === path.id} onPress={() => setSelectedPath(path.id)} />

@@ -292,6 +292,7 @@ export default function FeelScreen() {
 
   return (
     <View className="flex-1">
+      <LinearGradient colors={["#0F172A", "#1E1B4B", "#312E81"]} style={StyleSheet.absoluteFill} />
       <SafeAreaView className="flex-1">
         <ScrollView
           contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}
@@ -309,10 +310,10 @@ export default function FeelScreen() {
             }}
             className="p-6 rounded-[32px]"
           >
-            <Text className="text-lg font-medium text-slate-900 mb-2">
+            <Text className="text-lg font-medium text-white mb-2">
               Hello, I&apos;m Donna. I&apos;m here to listen without judgment.
             </Text>
-            <Text className="text-2xl font-bold text-slate-900 mb-6">
+            <Text className="text-2xl font-bold text-white mb-6">
               How is your mind feeling today?
             </Text>
 
@@ -344,7 +345,7 @@ export default function FeelScreen() {
                       className="w-full h-full items-center justify-center rounded-2xl p-2"
                     >
                       <Text className="text-4xl mb-1">{item.emoji}</Text>
-                      <Text className="text-[11px] font-bold text-slate-800 tracking-tight text-center">
+                      <Text className={`text-[11px] font-bold tracking-tight text-center ${isSelected ? 'text-slate-900' : 'text-white'}`}>
                         {item.label}
                       </Text>
                     </MotiView>
@@ -372,9 +373,9 @@ export default function FeelScreen() {
                 style={{ marginRight: 8, opacity: isFocused ? 0.9 : 0.5 }} 
               />
               <TextInput
-                className="flex-1 text-base text-slate-800 mr-2"
+                className="flex-1 text-base text-white mr-2"
                 placeholder="Or, express exactly what's on your mind..."
-                placeholderTextColor="#6B7280"
+                placeholderTextColor="#9CA3AF"
                 value={description}
                 onChangeText={setDescription}
                 multiline

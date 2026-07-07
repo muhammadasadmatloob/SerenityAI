@@ -193,7 +193,7 @@ async def safe_gemini_completion(prompt: str, system_instruction: str, max_token
     }
         
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name="Antigravity",
         system_instruction=system_instruction,
         generation_config=genai.types.GenerationConfig(**generation_config_args),
         safety_settings=safety_settings

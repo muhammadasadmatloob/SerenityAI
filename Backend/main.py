@@ -777,11 +777,11 @@ def save_message_analysis(db: Session, message_id: int, analysis_data: dict):
         db.rollback()
 
 def compile_past_sessions_summary_v2(uid: str, current_session_id: int, db: Session) -> str:
-    # Query past session summaries for the user, excluding current session (limit to 2 to preserve tokens)
+    # Query past session summaries for the user, excluding current session
     past_summaries = db.query(SessionSummary).filter(
         SessionSummary.user_uid == uid,
         SessionSummary.session_id != current_session_id
-    ).order_by(SessionSummary.created_at.desc()).limit(2).all()
+    ).order_by(SessionSummary.created_at.desc()).limit(5).all()
     
     if not past_summaries:
         # Fallback to the original simple compiler if no structured summaries exist yet

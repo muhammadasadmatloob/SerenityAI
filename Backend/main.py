@@ -1879,8 +1879,8 @@ async def chat_node(
         sess.duration_seconds = data.duration_seconds
         db.commit()
 
-    # Reject new inputs if duration exceeds 30 minutes
-    if sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS:
+    # Reject new inputs if duration exceeds timeout or session is explicitly ended
+    if (sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS) or sess.is_ended:
         return {"reply": "See you tomorrow in next session."}
 
     # Crisis Management backend-enforced scan
@@ -2053,7 +2053,7 @@ async def chat_voice(
         sess.duration_seconds = duration_seconds
         db.commit()
 
-    if sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS:
+    if (sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS) or sess.is_ended:
         return {
             "user_message": {"id": 0, "text": "See you tomorrow in next session.", "audio_url": None},
             "ai_message": {"id": 0, "text": "See you tomorrow in next session.", "audio_url": None}
@@ -2429,7 +2429,7 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
 @app.get("/api/session/duration/{session_id}")
 def get_duration(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     sess = validate_session_integrity(db, uid, session_id)
-    return {"duration_seconds": sess.duration_seconds or 0, "session_cap_seconds": SESSION_TIMEOUT_SECONDS}
+    return {"duration_seconds": sess.duration_seconds or 0, "session_cap_seconds": SESSION_TIMEOUT_SECONDS, "is_ended": sess.is_ended}
 
 @app.post("/api/session/duration")
 def update_duration(data: DurationUpdate, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):

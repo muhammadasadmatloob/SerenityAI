@@ -380,7 +380,7 @@ export default function ChatScreen() {
         setSecondsActive(data.duration_seconds);
         const cap = data.session_cap_seconds || 1800;
         setSessionCap(cap);
-        if (data.duration_seconds >= cap) {
+        if (data.duration_seconds >= cap || data.is_ended) {
           setSessionFinished(true);
         }
       } else {
@@ -475,6 +475,18 @@ export default function ChatScreen() {
         if (next >= sessionCap) {
           setSessionFinished(true);
           clearInterval(timer);
+          syncFinalDuration(next);
+          
+          // Explicitly mark session as ended on backend to lock it permanently
+          if (activeId) {
+            auth.currentUser?.getIdToken().then(token => {
+              fetch(`${BACKEND_URL}/api/session/end/${activeId}`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${token}` }
+              }).catch(() => {});
+            }).catch(() => {});
+          }
+
           Alert.alert("Session Finished", "See you tomorrow in next session.");
           if (isCallActive) {
             endCall();
@@ -559,15 +571,16 @@ export default function ChatScreen() {
     };
   }, []);
 
-  const syncFinalDuration = async () => {
+  const syncFinalDuration = async (overrideDuration?: number) => {
     if (!activeId) return;
     try {
       const user = auth.currentUser;
       const token = await user?.getIdToken();
+      const durationToSync = overrideDuration !== undefined ? overrideDuration : secondsActive;
       await fetch(`${BACKEND_URL}/api/session/duration`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ session_id: Number(activeId), duration_seconds: secondsActive })
+        body: JSON.stringify({ session_id: Number(activeId), duration_seconds: durationToSync })
       });
     } catch {
       console.log("Final duration sync failed");

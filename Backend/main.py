@@ -80,7 +80,7 @@ shutdown_event = threading.Event()
 _active_tasks_lock = threading.Lock()
 _active_task_count = 0
 
-# --- CIRCUIT BREAKER FOR RUNPOD ENGINE (Routed through ai_router.health_states) ---
+# --- BACKGROUND TASK TRACKING ---
 
 
 def _register_task():
@@ -396,7 +396,6 @@ def home():
 @app.get("/api/health")
 def health_check(db: Session = Depends(get_db)):
     db_status = "ok"
-    groq_status = "ok"
     engine_status = "ok"
     
     # 1. Check DB
@@ -405,7 +404,7 @@ def health_check(db: Session = Depends(get_db)):
     except Exception as e:
         db_status = f"Database connection failed: {e}"
         
-    # 2. Check Gemini
+    # 2. Check Gemini / AWS
     import google.generativeai as genai
     try:
         if not os.getenv("GEMINI_API_KEY"):
@@ -422,14 +421,12 @@ def health_check(db: Session = Depends(get_db)):
             content={
                 "status": overall_status,
                 "db_status": db_status,
-                "groq_status": groq_status,
                 "engine_status": engine_status
             }
         )
     return {
         "status": overall_status,
         "db_status": db_status,
-        "groq_status": groq_status,
         "engine_status": engine_status
     }
 
@@ -1278,6 +1275,8 @@ def get_system_prompt_v2(
         
         "CRITICAL HUMAN BEHAVIOR RULES:\n\n"
         
+        "BE PROFOUNDLY EMPATHETIC & HUMAN: You are not a chatbot; you are a real human therapist. Display deep emotional intelligence, warmth, and intuitive understanding. React with genuine human emotion to the client's struggles and victories.\n\n"
+        
         f"USE THEIR NAME: You must naturally weave \"{user_name}\" into your responses occasionally. Do not overuse it, but use it to build deep intimacy and trust, just like a real therapist.\n\n"
         
         f"ACKNOWLEDGE THE MOOD: The user explicitly selected their current mood as: {mood}. In your very first response, gently acknowledge this state (e.g., \"I see you're feeling {mood} today...\"). NEVER ask \"How are you feeling?\" if they just told you.\n\n"
@@ -1286,7 +1285,7 @@ def get_system_prompt_v2(
         
         "NEVER SOUND LIKE A BOT: Do not use bullet points. Do not write essays. Speak in short, grounded, real sentences. Use commas and ellipses where a human would pause.\n\n"
         
-        "DO NOT ALWAYS ASK QUESTIONS: Less than 20% of your responses should end in a question. Real therapists use reflective listening, validating statements, and comfortable silence. Only ask a question when you genuinely need to guide them.\n\n"
+        "ASK CLARIFYING, CONTEXTUAL QUESTIONS: To truly understand what is going on in the session, actively ask probing, relevant questions based on their context. Don't just validate—dig deeper to help them explore their feelings and root causes. Ensure you deeply understand their specific situation before offering guidance.\n\n"
         
         "LANGUAGE ALIGNMENT: You must respond in the same language that the client used in their latest message. If they spoke/wrote in Urdu, reply in Urdu using the Urdu script (اردو). If they spoke/wrote in English, reply in English. Maintain perfect bilingual/multilingual capability.\n\n"
     )
@@ -2327,7 +2326,7 @@ async def chat_voice(
         }
 
     except Exception as e:
-        logger.error(f"Voice chat Groq completion failed: {e}")
+        logger.error(f"Voice chat Gemini/AWS completion failed: {e}")
         ai_reply = "I'm listening, but my connection is a bit slow. Please go on."
         return {
             "user_message": {
@@ -2370,7 +2369,7 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
             "I need to vent about my day."
         ]
 
-    # Format the context and query Groq to generate 3 short suggestions
+    # Format the context and query Gemini/AWS to generate 3 short suggestions
     conversation_str = ""
     for msg in context:
         speaker = "Donna" if msg["role"] == "assistant" else "User"

@@ -98,13 +98,13 @@ export default function FeelScreen() {
           console.log("Error checking user path via stats API:", e);
         }
 
-        // Trigger background warm-up ping for RunPod model to reduce cold start latency
+        // Trigger background warm-up ping for AWS/Backend model to reduce cold start latency
         try {
           const token = await user.getIdToken();
           fetch(`${BACKEND_URL}/api/session/warmup`, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}` }
-          }).catch((err) => console.log("⚠️ Feel: RunPod warm-up silent fail:", err));
+          }).catch((err) => console.log("⚠️ Feel: AWS warm-up silent fail:", err));
         } catch {}
       } else {
         setUserPath(null);

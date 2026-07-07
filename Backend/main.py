@@ -459,23 +459,22 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
                 temp_file.write(chunk)
             temp_path = temp_file.name
         
-        audio_file_uri = None
         try:
-            audio_file_uri = genai.upload_file(temp_path)
             model = genai.GenerativeModel("gemini-3.5-flash")
             lang_hint = detect_user_language_hint(uid, None, db)
             prompt = WHISPER_TRANSCRIPTION_PROMPT
             if lang_hint:
                 prompt += f" The user often speaks in {lang_hint}."
             
-            response = model.generate_content([prompt, audio_file_uri])
+            with open(temp_path, "rb") as f:
+                audio_bytes = f.read()
+            
+            response = model.generate_content([
+                prompt,
+                {"mime_type": "audio/mp4", "data": audio_bytes}
+            ])
             transcript = response.text
         finally:
-            if audio_file_uri:
-                try:
-                    genai.delete_file(audio_file_uri.name)
-                except Exception:
-                    pass
             try:
                 os.remove(temp_path)
             except Exception:
@@ -2061,23 +2060,23 @@ async def chat_voice(
                     break
                 temp_file.write(chunk)
             temp_path = temp_file.name
-        audio_file_uri = None
         try:
-            audio_file_uri = genai.upload_file(temp_path)
             model = genai.GenerativeModel("gemini-3.5-flash")
             lang_hint = detect_user_language_hint(uid, session_id, db)
             prompt = WHISPER_TRANSCRIPTION_PROMPT
             if lang_hint:
                 prompt += f" The user often speaks in {lang_hint}."
             
-            response = model.generate_content([prompt, audio_file_uri])
+            with open(temp_path, "rb") as f:
+                audio_bytes = f.read()
+            
+            response = model.generate_content([
+                prompt,
+                {"mime_type": "audio/mp4", "data": audio_bytes}
+            ])
             user_text = response.text or ""
         finally:
-            if audio_file_uri:
-                try:
-                    genai.delete_file(audio_file_uri.name)
-                except Exception:
-                    pass
+            pass
     except Exception as e:
         logger.error(f"Voice chat transcription failed: {e}")
         raise HTTPException(status_code=500, detail="Voice transcription failed.")

@@ -212,6 +212,7 @@ async def safe_gemini_completion(prompt: str, system_instruction: str, max_token
         return MockCompletion(res.text)
     except Exception as e:
         logger.error(f"Gemini Engine failed or timed out: {e}")
+        logger.error(f"Gemini API Error: {str(e)}")
         raise e
 if not firebase_admin._apps:
     firebase_json = os.getenv("FIREBASE_JSON_CONTENT")
@@ -1530,6 +1531,8 @@ async def update_session_summary_task(session_id: int, uid: str):
         return
     
     _register_task()
+    import asyncio
+    await asyncio.sleep(5)
     from database import SessionLocal
     db = SessionLocal()
     try:

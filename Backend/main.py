@@ -462,7 +462,7 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
         audio_file_uri = None
         try:
             audio_file_uri = genai.upload_file(temp_path)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-3.5-flash")
             lang_hint = detect_user_language_hint(uid, None, db)
             prompt = WHISPER_TRANSCRIPTION_PROMPT
             if lang_hint:
@@ -2064,7 +2064,7 @@ async def chat_voice(
         audio_file_uri = None
         try:
             audio_file_uri = genai.upload_file(temp_path)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-3.5-flash")
             lang_hint = detect_user_language_hint(uid, session_id, db)
             prompt = WHISPER_TRANSCRIPTION_PROMPT
             if lang_hint:

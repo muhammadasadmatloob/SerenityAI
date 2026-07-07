@@ -51,7 +51,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-SESSION_TIMEOUT_SECONDS = 600
+SESSION_TIMEOUT_SECONDS = 1200
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
 
 if not ENCRYPTION_KEY:
@@ -1707,11 +1707,9 @@ async def start_sess(
     else:
         path_to_use = "casual"  # Default fallback
         
-    # --- Mood/Feeling Locking: Reuse existing session if one was already started today ---
-    today_start = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # --- Mood/Feeling Locking: Reuse existing session if one is still active ---
     existing_today = db.query(UserSession).filter(
         UserSession.user_uid == uid,
-        UserSession.created_at >= today_start,
         UserSession.is_ended == False
     ).order_by(UserSession.created_at.desc()).first()
     
@@ -1923,9 +1921,9 @@ async def chat_node(
     latest_stress_high = (latest_analysis and latest_analysis.stress_level == "High")
     
     # Transition rules
-    if sess.duration_seconds and sess.duration_seconds >= 1620 and not latest_stress_high:
+    if sess.duration_seconds and sess.duration_seconds >= 1020 and not latest_stress_high:
         current_phase = "closure"
-    elif sess.duration_seconds and sess.duration_seconds >= 1500 and not latest_stress_high:
+    elif sess.duration_seconds and sess.duration_seconds >= 900 and not latest_stress_high:
         current_phase = "reflection"
     elif turn_count <= 2:
         current_phase = "rapport_building"
@@ -2173,9 +2171,9 @@ async def chat_voice(
     latest_analysis = db.query(MessageAnalysis).join(Message).filter(Message.session_id == session_id).order_by(Message.timestamp.desc()).first()
     latest_stress_high = (latest_analysis and latest_analysis.stress_level == "High")
     
-    if sess.duration_seconds and sess.duration_seconds >= 1620 and not latest_stress_high:
+    if sess.duration_seconds and sess.duration_seconds >= 1020 and not latest_stress_high:
         current_phase = "closure"
-    elif sess.duration_seconds and sess.duration_seconds >= 1500 and not latest_stress_high:
+    elif sess.duration_seconds and sess.duration_seconds >= 900 and not latest_stress_high:
         current_phase = "reflection"
     elif turn_count <= 2:
         current_phase = "rapport_building"

@@ -355,7 +355,7 @@ export default function ChatScreen() {
         if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
           Alert.alert(
             "Session Expired",
-            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            "This session has expired. Please start a new one.",
             [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
           );
           return;

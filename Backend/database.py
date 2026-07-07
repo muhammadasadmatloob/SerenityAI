@@ -189,6 +189,15 @@ class SemanticMemory(Base):
     vector_data = Column(Text)  # Serialized JSON list of floats
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+class ContinuousLearningData(Base):
+    __tablename__ = "continuous_learning_data"
+    id = Column(Integer, primary_key=True, index=True)
+    user_input = Column(Text)
+    context_path = Column(String)
+    generated_strategy = Column(Text)
+    is_processed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
 Base.metadata.create_all(bind=engine)
 
 # Fail-safe DB migrations for existing databases

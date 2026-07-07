@@ -35,7 +35,8 @@ from pydantic import BaseModel
 from database import (
     get_db, User, UserSession, Message, SessionSummary, MessageAnalysis,
     TherapeuticIntervention, UserGoal, SessionReflection, MoodEntry,
-    PersonalityProfile, CrisisEvent, TreatmentPlan, SemanticMemory
+    PersonalityProfile, CrisisEvent, TreatmentPlan, SemanticMemory,
+    ContinuousLearningData, SessionLocal
 )
 from voice_analyzer import analyze_voice_emotion
 from semantic_memory import add_semantic_memory, retrieve_semantic_memories
@@ -985,13 +986,29 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
         )
         
     try:
-        return await safe_gemini_completion(
+        completion = await safe_gemini_completion(
             prompt=chat_history,
             system_instruction=system_instruction,
             max_tokens=4000,
             temperature=0.65,
             response_format=response_format
         )
+        
+        # Log to Continuous Learning Pipeline
+        try:
+            if runpod_analysis:
+                with SessionLocal() as db_session:
+                    new_data = ContinuousLearningData(
+                        user_input=chat_history,
+                        context_path=path or "general",
+                        generated_strategy=runpod_analysis
+                    )
+                    db_session.add(new_data)
+                    db_session.commit()
+        except Exception as cl_error:
+            logger.error(f"Failed to log Continuous Learning Data: {cl_error}")
+            
+        return completion
     except Exception as e:
         logger.error(f"Gemini AI failed: {e}")
         class MockChoiceMessage:
@@ -2831,9 +2848,46 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
         db.refresh(new_plan)
         return {"status": "created", "plan_id": new_plan.id}
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
+def run_daily_fine_tuning():
+    logger.info("Running daily fine tuning export...")
+    try:
+        with SessionLocal() as db:
+            unprocessed = db.query(ContinuousLearningData).filter_by(is_processed=False).all()
+            if not unprocessed:
+                logger.info("No new data to fine-tune on.")
+                return
+
+            dataset = []
+            for row in unprocessed:
+                user_msg = row.user_input[-1000:] if len(row.user_input) > 1000 else row.user_input
+                instruction = f"Analyze conversation and generate psychological strategy focusing on path ({row.context_path}). Conversation: {user_msg}"
+                dataset.append({"instruction": instruction, "output": row.generated_strategy})
+                row.is_processed = True
+            
+            db.commit()
+
+            runpod_api_key = os.getenv("RUNPOD_API_KEY")
+            runpod_training_url = os.getenv("RUNPOD_TRAINING_URL")
+            
+            if runpod_api_key and runpod_training_url:
+                payload = {"dataset": dataset}
+                headers = {"Authorization": f"Bearer {runpod_api_key}", "Content-Type": "application/json"}
+                response = requests.post(runpod_training_url, json=payload, headers=headers, timeout=30)
+                logger.info(f"RunPod Training Triggered: {response.status_code} {response.text}")
+            else:
+                logger.warning("RUNPOD_TRAINING_URL not configured. Dataset generated but not sent.")
+    except Exception as e:
+        logger.error(f"Failed to run daily fine tuning: {e}")
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(run_daily_fine_tuning, 'cron', hour=2, minute=0)
+
 @app.on_event("startup")
 def startup_event():
-    pass
+    scheduler.start()
+    logger.info("APScheduler started for continuous learning.")
 
 if __name__ == "__main__":
     initialize_services()

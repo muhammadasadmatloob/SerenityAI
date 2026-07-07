@@ -3,10 +3,9 @@ import uuid
 import json
 import math
 from typing import List, Dict, Any, Optional
-import google.generativeai as genai
 from database import SessionLocal, SemanticMemory
 
-# We use Gemini's text-embedding-004 model now.
+# We use HuggingFace inference API for embeddings now.
 
 def cosine_similarity(v1: List[float], v2: List[float]) -> float:
     dot_product = sum(x * y for x, y in zip(v1, v2))
@@ -34,13 +33,24 @@ def add_semantic_memory(
     content = content.strip()
     
     # 1. Generate text embedding
+    import requests
     try:
-        response = genai.embed_content(
-            model="models/text-embedding-004",
-            content=content,
-            task_type="retrieval_document",
+        hf_token = os.getenv("HF_TOKEN")
+        headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
+        response = requests.post(
+            "https://api-inference.huggingface.co/pipeline/feature-extraction/BAAI/bge-base-en-v1.5",
+            json={"inputs": content},
+            headers=headers,
+            timeout=10
         )
-        vector = response['embedding']
+        if response.status_code == 200:
+            vector = response.json()
+            # If the API returns a nested list, get the first element
+            if isinstance(vector, list) and len(vector) > 0 and isinstance(vector[0], list):
+                vector = vector[0]
+        else:
+            print(f"HF Embedding failed: {response.status_code} {response.text}")
+            return False
     except Exception as e:
         print(f"Failed to generate embedding for memory: {e}")
         return False

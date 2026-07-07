@@ -1,4 +1,4 @@
-﻿fastapi
+fastapi
 uvicorn
 SQLAlchemy
 psycopg2-binary
@@ -10,6 +10,6 @@ edge-tts
 python-multipart
 
 httpx
-google-generativeai
+groq
 apscheduler  
  

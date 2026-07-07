@@ -166,56 +166,66 @@ def initialize_services():
 
     # 3. Verify Gemini API Connectivity
     try:
-        import google.generativeai as genai
-        if not os.getenv("GEMINI_API_KEY"):
-            logger.critical("❌ CRITICAL: GEMINI_API_KEY missing in .env")
+        if not os.getenv("RUNPOD_API_KEY"):
+            logger.critical("❌ CRITICAL: RUNPOD_API_KEY missing in .env")
             raise SystemExit(1)
-        logger.info("✅ Gemini API configuration validated successfully.")
+        logger.info("✅ RunPod API configuration validated successfully.")
     except Exception as e:
-        logger.critical(f"❌ CRITICAL: Gemini API validation failed: {e}")
+        logger.critical(f"❌ CRITICAL: RunPod API validation failed: {e}")
         raise SystemExit(1)
 
     logger.info("🚀 All critical services validated successfully. Starting application server...")
 
-async def safe_gemini_completion(prompt: str, system_instruction: str, max_tokens: int = 4000, temperature: float = 0.3, response_format=None):
+async def safe_runpod_completion(prompt: str, system_instruction: str, max_tokens: int = 4000, temperature: float = 0.3, response_format=None):
     # Store the prompt in context for debugging on error
     llm_payload_context.set([{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}])
     
-    generation_config_args = {
-        "temperature": temperature,
-        "max_output_tokens": max_tokens,
-    }
+    runpod_api_key = os.getenv("RUNPOD_API_KEY")
+    runpod_endpoint_id = os.getenv("RUNPOD_ENDPOINT_ID")
+    if not runpod_api_key or not runpod_endpoint_id:
+        raise Exception("RUNPOD_API_KEY or RUNPOD_ENDPOINT_ID not set")
+    
     if response_format and response_format.get("type") == "json_object":
-        generation_config_args["response_mime_type"] = "application/json"
+        system_instruction += "\nIMPORTANT: You must output ONLY valid JSON format."
         
-    safety_settings = {
-        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    combined_prompt = f"System Instruction:\n{system_instruction}\n\nUser Message:\n{prompt}"
+        
+    url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/runsync"
+    headers = {
+        "Authorization": f"Bearer {runpod_api_key}",
+        "Content-Type": "application/json"
     }
-        
-    model = genai.GenerativeModel(
-        model_name="gemini-3.1-flash-lite",
-        system_instruction=system_instruction,
-        generation_config=genai.types.GenerationConfig(**generation_config_args),
-        safety_settings=safety_settings
-    )
+    payload = {
+        "input": {
+            "prompt": combined_prompt,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
+    }
     
     try:
-        res = await model.generate_content_async(prompt)
-        # Create a mock completion object to satisfy any legacy callers
-        class MockChoiceMessage:
-            def __init__(self, content): self.content = content
-        class MockChoice:
-            def __init__(self, content): self.message = MockChoiceMessage(content)
-        class MockCompletion:
-            def __init__(self, content): self.choices = [MockChoice(content)]
-        
-        return MockCompletion(res.text)
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            rp_response = await client.post(url, json=payload, headers=headers)
+            if rp_response.status_code == 200:
+                rp_data = rp_response.json()
+                output_text = str(rp_data.get("output", ""))
+                
+                class MockChoiceMessage:
+                    def __init__(self, content): self.content = content
+                class MockChoice:
+                    def __init__(self, content): self.message = MockChoiceMessage(content)
+                class MockCompletion:
+                    def __init__(self, content): self.choices = [MockChoice(content)]
+                
+                return MockCompletion(output_text)
+            else:
+                raise Exception(f"RunPod request failed: {rp_response.status_code} {rp_response.text}")
     except Exception as e:
-        logger.error(f"Gemini Engine failed or timed out: {e}")
-        logger.error(f"Gemini API Error: {str(e)}")
+        logger.error(f"RunPod Engine failed: {e}")
         raise e
 if not firebase_admin._apps:
     firebase_json = os.getenv("FIREBASE_JSON_CONTENT")
@@ -408,14 +418,13 @@ def health_check(db: Session = Depends(get_db)):
     except Exception as e:
         db_status = f"Database connection failed: {e}"
         
-    # 2. Check Gemini / RunPod
-    import google.generativeai as genai
+    # 2. Check RunPod and Groq
     try:
-        if not os.getenv("GEMINI_API_KEY"):
-            raise ValueError("GEMINI_API_KEY is not set")
+        if not os.getenv("RUNPOD_API_KEY") or not os.getenv("GROQ_API_KEY"):
+            raise ValueError("RUNPOD_API_KEY or GROQ_API_KEY is not set")
         engine_status = "ok"
     except Exception as e:
-        engine_status = f"Gemini API configuration failed: {e}"
+        engine_status = f"RunPod/Groq API configuration failed: {e}"
         
     overall_status = "ok" if db_status == "ok" else "error"
     
@@ -451,7 +460,7 @@ def check_password_strength(data: PasswordCheck):
 @app.post("/api/transcribe")
 def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     import tempfile
-    import google.generativeai as genai
+    import groq
     try:
         ext = os.path.splitext(file.filename)[1] or ".m4a"
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
@@ -463,20 +472,24 @@ def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_curren
             temp_path = temp_file.name
         
         try:
-            model = genai.GenerativeModel("gemini-3.1-flash-lite")
+            groq_api_key = os.getenv("GROQ_API_KEY")
+            if not groq_api_key:
+                raise Exception("GROQ_API_KEY is missing")
+                
+            client = groq.Groq(api_key=groq_api_key)
             lang_hint = detect_user_language_hint(uid, None, db)
             prompt = WHISPER_TRANSCRIPTION_PROMPT
             if lang_hint:
                 prompt += f" The user often speaks in {lang_hint}."
             
             with open(temp_path, "rb") as f:
-                audio_bytes = f.read()
+                transcription = client.audio.transcriptions.create(
+                    file=(os.path.basename(temp_path), f.read()),
+                    model="whisper-large-v3",
+                    prompt=prompt
+                )
             
-            response = model.generate_content([
-                prompt,
-                {"mime_type": "audio/mp4", "data": audio_bytes}
-            ])
-            transcript = response.text
+            transcript = transcription.text
         finally:
             try:
                 os.remove(temp_path)
@@ -986,7 +999,7 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
         )
         
     try:
-        completion = await safe_gemini_completion(
+        completion = await safe_runpod_completion(
             prompt=chat_history,
             system_instruction=system_instruction,
             max_tokens=4000,
@@ -1650,7 +1663,7 @@ async def update_session_summary_task(session_id: int, uid: str):
                     
         # Generate the updated summary from Gemini
         prompt = get_summary_generation_prompt(conversation_history, past_summary_text)
-        res = await safe_gemini_completion(
+        res = await safe_runpod_completion(
             prompt=prompt,
             system_instruction="You are a clinical assistant. Summarize the session strictly in JSON.",
             temperature=0.3,
@@ -2129,7 +2142,7 @@ async def chat_voice(
 
     # 2. Save uploaded audio to a temp file and transcribe
     import tempfile
-    import google.generativeai as genai
+    import groq
     try:
         ext = os.path.splitext(file.filename)[1] or ".m4a"
         with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
@@ -2140,20 +2153,24 @@ async def chat_voice(
                 temp_file.write(chunk)
             temp_path = temp_file.name
         try:
-            model = genai.GenerativeModel("gemini-3.1-flash-lite")
+            groq_api_key = os.getenv("GROQ_API_KEY")
+            if not groq_api_key:
+                raise Exception("GROQ_API_KEY is missing")
+                
+            client = groq.Groq(api_key=groq_api_key)
             lang_hint = detect_user_language_hint(uid, session_id, db)
             prompt = WHISPER_TRANSCRIPTION_PROMPT
             if lang_hint:
                 prompt += f" The user often speaks in {lang_hint}."
             
             with open(temp_path, "rb") as f:
-                audio_bytes = f.read()
+                transcription = client.audio.transcriptions.create(
+                    file=(os.path.basename(temp_path), f.read()),
+                    model="whisper-large-v3",
+                    prompt=prompt
+                )
             
-            response = model.generate_content([
-                prompt,
-                {"mime_type": "audio/mp4", "data": audio_bytes}
-            ])
-            user_text = response.text or ""
+            user_text = transcription.text or ""
         finally:
             pass
     except Exception as e:
@@ -2468,7 +2485,7 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
     )
     
     try:
-        res = await safe_gemini_completion(
+        res = await safe_runpod_completion(
             prompt=f"Conversation history:\n{conversation_str}\n\nWhat are the next 3 reply options?",
             system_instruction=prompt
         )
@@ -2781,7 +2798,7 @@ async def get_mood_summary(period: str = "weekly", uid: str = Depends(get_curren
     try:
         sys_instr = "You are Donna, a wise, warm therapeutic advisor. Analyze the user's average mood scores and write a brief, supportive, conversational 2-sentence clinical insight."
         user_prompt = f"Here are my averages over the past {period} period: Mood: {avg_mood:.1f}/10, Anxiety: {avg_anxiety:.1f}/10, Stress: {avg_stress:.1f}/10, Energy: {avg_energy:.1f}/10, Confidence: {avg_confidence:.1f}/10. What insight do you have?"
-        res = await safe_gemini_completion(
+        res = await safe_runpod_completion(
             prompt=user_prompt,
             system_instruction=sys_instr,
             temperature=0.7,

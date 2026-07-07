@@ -10,5 +10,5 @@ edge-tts
 python-multipart
 
 httpx
-google-generativeai
+groq
 apscheduler

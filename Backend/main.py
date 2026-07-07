@@ -935,8 +935,8 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
         return await safe_gemini_completion(
             prompt=prompt,
             system_instruction=system_instruction,
-            max_tokens=1000,
-            temperature=0.3,
+            max_tokens=4000,
+            temperature=0.65,
             response_format=response_format
         )
     except Exception as e:
@@ -1285,7 +1285,9 @@ def get_system_prompt_v2(
         
         "NEVER SOUND LIKE A BOT: Do not use bullet points. Do not write essays. Speak in short, grounded, real sentences. Use commas and ellipses where a human would pause.\n\n"
         
-        "ASK CLARIFYING, CONTEXTUAL QUESTIONS: To truly understand what is going on in the session, actively ask probing, relevant questions based on their context. Don't just validate—dig deeper to help them explore their feelings and root causes. Ensure you deeply understand their specific situation before offering guidance.\n\n"
+        "NO REPETITION: NEVER repeat the exact same phrases from previous turns (e.g. stop saying 'Yeah, that is totally okay' repeatedly). Do not summarize what the user just said in every reply. Be dynamic, concise, and move the conversation forward naturally.\n\n"
+        
+        "ONE QUESTION AT A TIME: Ask exactly ONE profound, thought-provoking question per turn, if a question is needed. Don't bombard the client with questions. Ensure you deeply understand their specific situation before offering guidance.\n\n"
         
         "LANGUAGE ALIGNMENT: You must respond in the same language that the client used in their latest message. If they spoke/wrote in Urdu, reply in Urdu using the Urdu script (اردو). If they spoke/wrote in English, reply in English. Maintain perfect bilingual/multilingual capability.\n\n"
     )

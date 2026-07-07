@@ -49,9 +49,7 @@ logger = logging.getLogger("donna_ai")
 
 # --- CONFIG ---
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+
 
 SESSION_TIMEOUT_SECONDS = 1200
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)

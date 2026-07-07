@@ -11,4 +11,3 @@ python-multipart
 
 httpx
 google-generativeai
-boto3

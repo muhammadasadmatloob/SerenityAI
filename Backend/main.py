@@ -1,6 +1,8 @@
 import os
 import datetime
 import time
+import uuid
+import httpx
 import contextvars
 import requests
 from functools import lru_cache
@@ -405,7 +407,7 @@ def health_check(db: Session = Depends(get_db)):
     except Exception as e:
         db_status = f"Database connection failed: {e}"
         
-    # 2. Check Gemini / AWS
+    # 2. Check Gemini / RunPod
     import google.generativeai as genai
     try:
         if not os.getenv("GEMINI_API_KEY"):
@@ -918,7 +920,7 @@ def validate_session_integrity(db: Session, uid: str, session_id: int) -> UserSe
     return sess
 
 async def hybrid_ai_router(messages, current_phase: str, path: str = None, response_format=None) -> Any:
-    logger.info(f"Hybrid AI Router: Routing phase '{current_phase}' natively to Gemini...")
+    logger.info(f"Hybrid AI Router: Starting Thinker & Speaker pipeline for phase '{current_phase}'...")
     
     system_instruction = ""
     history_lines = []
@@ -929,11 +931,62 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
             role = "Client" if msg.get("role") == "user" else "Donna (Therapist)"
             history_lines.append(f"{role}: {msg.get('content', '')}")
             
-    prompt = "\n".join(history_lines) + "\nDonna (Therapist): "
+    chat_history = "\n".join(history_lines) + "\nDonna (Therapist): "
     
+    # -----------------------------------------------------
+    # STEP 1: THINKER (RunPod Local Engine)
+    # -----------------------------------------------------
+    runpod_analysis = ""
+    runpod_api_key = os.getenv("RUNPOD_API_KEY")
+    runpod_endpoint_id = os.getenv("RUNPOD_ENDPOINT_ID")
+    
+    if runpod_api_key and runpod_endpoint_id:
+        try:
+            thinker_prompt = (
+                f"You are the internal psychological analysis engine for Donna AI. "
+                f"Analyze the following conversation context, focusing heavily on the chosen therapeutic path ({path}). "
+                f"Conversation:\n{chat_history}\n\n"
+                f"Provide a brief thought process on what Donna should say next, emphasizing the {path} path."
+            )
+            
+            url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/runsync"
+            headers = {
+                "Authorization": f"Bearer {runpod_api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "input": {
+                    "prompt": thinker_prompt,
+                    "messages": [{"role": "user", "content": thinker_prompt}]
+                }
+            }
+            
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                rp_response = await client.post(url, json=payload, headers=headers)
+                if rp_response.status_code == 200:
+                    rp_data = rp_response.json()
+                    if "output" in rp_data:
+                        runpod_analysis = str(rp_data["output"])
+                    logger.info("RunPod Thinker Analysis completed successfully.")
+                else:
+                    logger.warning(f"RunPod request failed with status {rp_response.status_code}: {rp_response.text}")
+        except Exception as e:
+            logger.error(f"RunPod Thinker engine failed: {e}. Falling back to Gemini-only mode.")
+            
+    # -----------------------------------------------------
+    # STEP 2: SPEAKER (Gemini)
+    # -----------------------------------------------------
+    if runpod_analysis:
+        system_instruction += (
+            f"\n\n--- INTERNAL PSYCHOLOGICAL ANALYSIS (from Local Engine) ---\n"
+            f"The following is a psychological analysis of the current state based on the user's path ({path}).\n"
+            f"You MUST use this strategy to craft your response:\n"
+            f"{runpod_analysis}\n-------------------------------------------------\n"
+        )
+        
     try:
         return await safe_gemini_completion(
-            prompt=prompt,
+            prompt=chat_history,
             system_instruction=system_instruction,
             max_tokens=4000,
             temperature=0.65,
@@ -2339,7 +2392,7 @@ async def chat_voice(
         }
 
     except Exception as e:
-        logger.error(f"Voice chat Gemini/AWS completion failed: {e}")
+        logger.error(f"Voice chat Gemini/RunPod completion failed: {e}")
         ai_reply = "I'm listening, but my connection is a bit slow. Please go on."
         return {
             "user_message": {
@@ -2382,7 +2435,7 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
             "I need to vent about my day."
         ]
 
-    # Format the context and query Gemini/AWS to generate 3 short suggestions
+    # Format the context and query Gemini/RunPod to generate 3 short suggestions
     conversation_str = ""
     for msg in context:
         speaker = "Donna" if msg["role"] == "assistant" else "User"

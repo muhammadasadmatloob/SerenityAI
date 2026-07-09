@@ -12,4 +12,4 @@ python-multipart
 httpx
 groq
 apscheduler  
- 
+google-generativeai

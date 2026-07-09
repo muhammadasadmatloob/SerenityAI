@@ -40,6 +40,8 @@ from database import (
 )
 from voice_analyzer import analyze_voice_emotion
 from semantic_memory import add_semantic_memory, retrieve_semantic_memories
+import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 load_dotenv()
 
@@ -49,6 +51,9 @@ logger = logging.getLogger("donna_ai")
 
 # --- CONFIG ---
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 
 SESSION_TIMEOUT_SECONDS = 1200
@@ -172,6 +177,47 @@ def initialize_services():
         raise SystemExit(1)
 
     logger.info("🚀 All critical services validated successfully. Starting application server...")
+
+async def safe_gemini_completion(prompt: str, system_instruction: str, max_tokens: int = 4000, temperature: float = 0.3, response_format=None):
+    # Store the prompt in context for debugging on error
+    llm_payload_context.set([{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}])
+    
+    generation_config_args = {
+        "temperature": temperature,
+        "max_output_tokens": max_tokens,
+    }
+    if response_format and response_format.get("type") == "json_object":
+        generation_config_args["response_mime_type"] = "application/json"
+        
+    safety_settings = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }
+        
+    model = genai.GenerativeModel(
+        model_name="gemini-3.1-flash-lite",
+        system_instruction=system_instruction,
+        generation_config=genai.types.GenerationConfig(**generation_config_args),
+        safety_settings=safety_settings
+    )
+    
+    try:
+        res = await model.generate_content_async(prompt)
+        # Create a mock completion object to satisfy any legacy callers
+        class MockChoiceMessage:
+            def __init__(self, content): self.content = content
+        class MockChoice:
+            def __init__(self, content): self.message = MockChoiceMessage(content)
+        class MockCompletion:
+            def __init__(self, content): self.choices = [MockChoice(content)]
+        
+        return MockCompletion(res.text)
+    except Exception as e:
+        logger.error(f"Gemini Engine failed or timed out: {e}")
+        logger.error(f"Gemini API Error: {str(e)}")
+        raise e
 
 async def safe_runpod_completion(prompt: str, system_instruction: str, max_tokens: int = 4000, temperature: float = 0.3, response_format=None):
     # Store the prompt in context for debugging on error
@@ -1040,7 +1086,7 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
         )
         
     try:
-        completion = await safe_runpod_completion(
+        completion = await safe_gemini_completion(
             prompt=chat_history,
             system_instruction=system_instruction,
             max_tokens=4000,

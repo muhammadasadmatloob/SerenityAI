@@ -177,52 +177,96 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
     # Store the prompt in context for debugging on error
     llm_payload_context.set([{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}])
     
-    runpod_api_key = os.getenv("RUNPOD_API_KEY")
-    runpod_endpoint_id = os.getenv("RUNPOD_ENDPOINT_ID")
-    if not runpod_api_key or not runpod_endpoint_id:
-        raise Exception("RUNPOD_API_KEY or RUNPOD_ENDPOINT_ID not set")
-    
     if response_format and response_format.get("type") == "json_object":
         system_instruction += "\nIMPORTANT: You must output ONLY valid JSON format."
         
-    combined_prompt = f"System Instruction:\n{system_instruction}\n\nUser Message:\n{prompt}"
+    class MockChoiceMessage:
+        def __init__(self, content): self.content = content
+    class MockChoice:
+        def __init__(self, content): self.message = MockChoiceMessage(content)
+    class MockCompletion:
+        def __init__(self, content): self.choices = [MockChoice(content)]
+
+    # --- 1. TRY RUNPOD FIRST ---
+    runpod_api_key = os.getenv("RUNPOD_API_KEY")
+    runpod_endpoint_id = os.getenv("RUNPOD_ENDPOINT_ID")
+    
+    if runpod_api_key and runpod_endpoint_id:
+        combined_prompt = f"System Instruction:\n{system_instruction}\n\nUser Message:\n{prompt}"
+        url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/runsync"
+        headers = {
+            "Authorization": f"Bearer {runpod_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "input": {
+                "prompt": combined_prompt,
+                "messages": [
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature
+            }
+        }
         
-    url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/runsync"
-    headers = {
-        "Authorization": f"Bearer {runpod_api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "input": {
-            "prompt": combined_prompt,
-            "messages": [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": max_tokens,
-            "temperature": temperature
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                rp_response = await client.post(url, json=payload, headers=headers)
+                if rp_response.status_code == 200:
+                    rp_data = rp_response.json()
+                    status = rp_data.get("status")
+                    if status == "COMPLETED":
+                        output_text = str(rp_data.get("output", ""))
+                        if isinstance(rp_data.get("output"), dict) and "choices" in rp_data["output"]:
+                            output_text = str(rp_data["output"]["choices"][0]["message"]["content"])
+                        return MockCompletion(output_text)
+                    else:
+                        logger.warning(f"RunPod failed or is still in queue (status: {status}). Falling back to Gemini.")
+                else:
+                    logger.warning(f"RunPod request failed: {rp_response.status_code}. Falling back to Gemini.")
+        except Exception as e:
+            logger.warning(f"RunPod Engine failed: {e}. Falling back to Gemini.")
+    else:
+        logger.warning("RunPod credentials missing. Falling back to Gemini.")
+
+    # --- 2. FALLBACK TO GEMINI ---
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        raise Exception("RunPod failed and GEMINI_API_KEY is not set for fallback")
+
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+    gemini_payload = {
+        "system_instruction": {
+            "parts": {"text": system_instruction}
+        },
+        "contents": [
+            {"role": "user", "parts": [{"text": prompt}]}
+        ],
+        "generationConfig": {
+            "temperature": temperature,
+            "maxOutputTokens": max_tokens
         }
     }
     
+    if response_format and response_format.get("type") == "json_object":
+        gemini_payload["generationConfig"]["responseMimeType"] = "application/json"
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            rp_response = await client.post(url, json=payload, headers=headers)
-            if rp_response.status_code == 200:
-                rp_data = rp_response.json()
-                output_text = str(rp_data.get("output", ""))
-                
-                class MockChoiceMessage:
-                    def __init__(self, content): self.content = content
-                class MockChoice:
-                    def __init__(self, content): self.message = MockChoiceMessage(content)
-                class MockCompletion:
-                    def __init__(self, content): self.choices = [MockChoice(content)]
-                
-                return MockCompletion(output_text)
+            gemini_response = await client.post(gemini_url, json=gemini_payload)
+            if gemini_response.status_code == 200:
+                gemini_data = gemini_response.json()
+                try:
+                    output_text = gemini_data["candidates"][0]["content"]["parts"][0]["text"]
+                    return MockCompletion(output_text)
+                except (KeyError, IndexError) as e:
+                    logger.error(f"Failed to parse Gemini response: {gemini_data}")
+                    raise Exception("Invalid response format from Gemini")
             else:
-                raise Exception(f"RunPod request failed: {rp_response.status_code} {rp_response.text}")
+                raise Exception(f"Gemini fallback request failed: {gemini_response.status_code} {gemini_response.text}")
     except Exception as e:
-        logger.error(f"RunPod Engine failed: {e}")
+        logger.error(f"Gemini fallback completely failed: {e}")
         raise e
 if not firebase_admin._apps:
     firebase_json = os.getenv("FIREBASE_JSON_CONTENT")

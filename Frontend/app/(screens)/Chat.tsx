@@ -1358,8 +1358,8 @@ export default function ChatScreen() {
 
         {/* RESIZE AND OVERLAP FIXED CONTAINER */}
         <View 
-          className="bg-white border-t border-gray-100 px-5 pt-4"
-          style={{ paddingBottom: isKeyboardVisible ? 12 : 96 }}
+          className="bg-transparent px-5 pt-4"
+          style={{ paddingBottom: isKeyboardVisible ? 12 : 85 }}
         > 
           {/* SUGGESTION CHIPS */}
           {!sessionFinished && !loading && !isCallActive && suggestions.length > 0 && (

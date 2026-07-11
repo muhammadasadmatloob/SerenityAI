@@ -490,6 +490,10 @@ class TreatmentPlanCreate(BaseModel):
 class PasswordCheck(BaseModel):
     password: str
 
+class ReportGenerateRequest(BaseModel):
+    start_date: str # ISO string
+    end_date: str # ISO string
+
 @app.get("/")
 def home():
     return {"status": "Donna AI Backend is Online"}
@@ -2951,6 +2955,74 @@ def create_or_update_treatment_plan(data: TreatmentPlanCreate, uid: str = Depend
         db.commit()
         db.refresh(new_plan)
         return {"status": "created", "plan_id": new_plan.id}
+
+# --- REPORT GENERATION API ---
+@app.post("/api/reports/generate")
+async def generate_clinical_report(req: ReportGenerateRequest, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(firebase_uid=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    try:
+        start_date = datetime.datetime.fromisoformat(req.start_date.replace("Z", "+00:00"))
+        end_date = datetime.datetime.fromisoformat(req.end_date.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format.")
+    
+    # Ensure end_date covers the whole day if they are the same
+    if start_date.date() == end_date.date():
+        end_date = end_date + datetime.timedelta(days=1)
+
+    sessions = db.query(UserSession).filter(UserSession.user_uid == uid, UserSession.created_at >= start_date, UserSession.created_at <= end_date).all()
+    session_ids = [s.id for s in sessions]
+    
+    mood_entries = db.query(MoodEntry).filter(MoodEntry.user_uid == uid, MoodEntry.created_at >= start_date, MoodEntry.created_at <= end_date).all()
+    crisis_events = db.query(CrisisEvent).filter(CrisisEvent.user_uid == uid, CrisisEvent.created_at >= start_date, CrisisEvent.created_at <= end_date).all()
+    treatment_plans = db.query(TreatmentPlan).filter(TreatmentPlan.user_uid == uid).all()
+    
+    summaries = []
+    if session_ids:
+        summaries = db.query(SessionSummary).filter(SessionSummary.session_id.in_(session_ids)).all()
+        
+    data_dump = {
+        "user_name": user.name,
+        "report_period": f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
+        "total_sessions": len(sessions),
+        "total_duration_minutes": sum(s.duration_seconds for s in sessions) // 60,
+        "average_mood": round(sum(m.mood_score for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
+        "average_anxiety": round(sum(m.anxiety_score for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
+        "average_stress": round(sum(m.stress_score for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
+        "crisis_events_count": len(crisis_events),
+        "treatment_plans": [{"focus": p.focus_area, "progress": p.progress} for p in treatment_plans],
+        "session_summaries": [s.summary_data for s in summaries]
+    }
+    
+    system_instruction = '''You are a highly qualified clinical psychologist AI assistant.
+Your task is to generate a comprehensive, professional clinical report based on the provided patient data.
+The report should be visually beautiful, well-aligned, and formatted entirely in HTML using TailwindCSS utility classes.
+Structure the report with the following sections:
+1. Patient Overview
+2. Engagement & Vitals Summary
+3. Clinical Observations & Themes
+4. Risk & Safety Assessment
+5. Recommendations
+
+Use elegant, professional styling. Use a clean white background with subtle gray borders, rounded corners, shadow effects, and clear typography (e.g., sans-serif).
+IMPORTANT: Return ONLY the raw HTML string (no markdown blocks, no ```html tags, just the pure HTML code starting with <div and ending with </div>). Do not include <html> or <body> tags, just a container <div> that can be rendered directly.'''
+
+    prompt = f"Patient Data for custom date range report:\n{json.dumps(data_dump, indent=2)}\n\nGenerate the Tailwind CSS styled HTML report now."
+    
+    try:
+        response = await safe_runpod_completion(prompt, system_instruction, max_tokens=3000, temperature=0.3)
+        html_content = response.choices[0].message.content.strip()
+        if html_content.startswith("```html"):
+            html_content = html_content[7:]
+        if html_content.endswith("```"):
+            html_content = html_content[:-3]
+        return {"status": "success", "html": html_content.strip()}
+    except Exception as e:
+        logger.error(f"Failed to generate report: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate report")
 
 from apscheduler.schedulers.background import BackgroundScheduler # type: ignore
 

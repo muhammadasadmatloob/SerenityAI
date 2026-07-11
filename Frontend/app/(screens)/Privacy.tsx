@@ -10,6 +10,7 @@ import {
   ScrollView,
   Text,
   View,
+  DeviceEventEmitter,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
@@ -38,6 +39,7 @@ export default function PrivacyScreen() {
     if (canProceed) {
       try {
         await SecureStore.setItemAsync("HAS_ACCEPTED_PRIVACY", "true");
+        DeviceEventEmitter.emit("PRIVACY_ACCEPTED");
         router.replace("/(auth)/auth?mode=signup");
       } catch (error) {
         // Error is used here, so this is fine

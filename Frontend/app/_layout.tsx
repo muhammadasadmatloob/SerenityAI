@@ -6,7 +6,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 
 import { AnimatePresence, MotiText, MotiView } from "moti";
 import { useEffect, useState, useRef } from "react";
-import { Text, View, Dimensions, Image, StyleSheet, TouchableOpacity, LogBox } from "react-native";
+import { Text, View, Dimensions, Image, StyleSheet, TouchableOpacity, LogBox, DeviceEventEmitter } from "react-native";
 import * as Network from "expo-network";
 import * as SecureStore from "expo-secure-store";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -106,6 +106,10 @@ export default function RootLayout() {
     }
     checkConnectivity();
 
+    const privacyListener = DeviceEventEmitter.addListener("PRIVACY_ACCEPTED", () => {
+      setHasAcceptedPrivacy(true);
+    });
+
     // 1b. Check Privacy Status
     async function checkPrivacy() {
       try {
@@ -190,6 +194,7 @@ export default function RootLayout() {
     return () => { 
       unsubAuth();
       if (unsubSnap.current) unsubSnap.current(); 
+      privacyListener.remove();
     };
   }, [retryTrigger]);
 

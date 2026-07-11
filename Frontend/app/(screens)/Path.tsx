@@ -35,53 +35,10 @@ export default function PathScreen() {
         console.log("Error saving path to Firestore:", fsErr);
       }
 
-      const token = await user.getIdToken();
-      const maxRetries = 3;
-      let lastError = "";
-
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutMs = attempt === 1 ? 15000 : 30000;
-          const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-          const response = await fetch(`${BACKEND_URL}/api/session/start`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ mood: mood, path: selectedPath, description: desc }),
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-
-          const result = await response.json();
-
-          if (response.ok && result.session_id) {
-            router.push({
-              pathname: "/(screens)/Chat",
-              params: { 
-                sessionId: result.session_id.toString(), 
-                firstMessage: result.first_message 
-              }
-            });
-            return;
-          } else {
-            lastError = result.message || result.detail || "Server returned an error.";
-          }
-        } catch (fetchErr: any) {
-          if (fetchErr.name === "AbortError") {
-            lastError = "Request timed out. The server may be starting up.";
-          } else {
-            lastError = fetchErr.message || "Network request failed.";
-          }
-        }
-
-        // Wait before retrying (except on last attempt)
-        if (attempt < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-      }
-
-      Alert.alert("Connection Failed", `${lastError}\n\nPlease check your internet connection and try again.`);
+      router.push({
+        pathname: "/(screens)/Connecting",
+        params: { mood: mood, description: desc, path: selectedPath }
+      });
     } catch (err: any) {
       Alert.alert("Error", err.message || "Something went wrong. Please try again.");
     } finally {

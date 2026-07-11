@@ -257,7 +257,7 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
         }
         
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 rp_response = await client.post(url, json=payload, headers=headers)
                 if rp_response.status_code == 200:
                     rp_data = rp_response.json()
@@ -299,7 +299,7 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
         gemini_payload["generationConfig"]["responseMimeType"] = "application/json"
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             gemini_response = await client.post(gemini_url, json=gemini_payload)
             if gemini_response.status_code == 200:
                 gemini_data = gemini_response.json()

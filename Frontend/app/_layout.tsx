@@ -6,7 +6,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 
 import { AnimatePresence, MotiText, MotiView } from "moti";
 import { useEffect, useState, useRef } from "react";
-import { Text, View, Dimensions, Image, StyleSheet, TouchableOpacity, LogBox, DeviceEventEmitter } from "react-native";
+import { Text, View, Dimensions, Image, StyleSheet, TouchableOpacity, LogBox, DeviceEventEmitter, Keyboard, Platform } from "react-native";
 import * as Network from "expo-network";
 import * as SecureStore from "expo-secure-store";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -14,6 +14,22 @@ import { auth, db } from "../firebase/firebase";
 import { waitForBackendDiscovery, BACKEND_URL } from "../constants/config";
 import "../global.css";
 import TabBar from "./(components)/TabBar";
+
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
+  return (
+    <SafeAreaProvider>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#fff" }}>
+        <Text style={{ fontSize: 20, fontWeight: "bold", color: "red", marginBottom: 10 }}>App Crashed!</Text>
+        <Text style={{ fontSize: 14, color: "#333", marginBottom: 20, textAlign: "center" }}>{error.message}</Text>
+        <Text style={{ fontSize: 12, color: "#666", marginBottom: 20 }}>{error.stack}</Text>
+        <TouchableOpacity onPress={retry} style={{ padding: 10, backgroundColor: "#007AFF", borderRadius: 8 }}>
+          <Text style={{ color: "white" }}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaProvider>
+  );
+}
+
 
 // Intercept Firestore connection timeout/offline messages and downgrade them from Error to Warning,
 // preventing them from opening the React Native error/RedBox screen.
@@ -243,6 +259,16 @@ export default function RootLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAppReady, isProfileComplete, segments, networkError, user, hasAcceptedPrivacy]);
 
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  useEffect(() => {
+    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setIsKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   if (!isAppReady) return null;
 
   return (
@@ -295,8 +321,8 @@ export default function RootLayout() {
           <Stack.Screen name="(screens)/Settings" options={{ animation: "fade" }} />
         </Stack>
 
-        {/* Global TabBar - Only shown when splash is gone and on main pages */}
-        {!showCustomSplash && isProfileComplete && isTabBarVisible && <TabBar />}
+        {/* Global TabBar - Only shown when splash is gone and on main pages and keyboard is hidden */}
+        {!showCustomSplash && isProfileComplete && isTabBarVisible && !isKeyboardVisible && <TabBar />}
 
         {/* Custom Animated Splash Screen */}
         <AnimatePresence>

@@ -43,7 +43,8 @@
           "android": {
             "enableProguardInReleaseBuilds": false,
             "shrinkResourcesInReleaseBuilds": false,
-            "enableMinifyInReleaseBuilds": false
+            "enableMinifyInReleaseBuilds": false,
+            "enableHermes": true
           }
         }
       ]

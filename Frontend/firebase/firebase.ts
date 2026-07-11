@@ -7,23 +7,39 @@ import { initializeFirestore } from "firebase/firestore";
 // Silence Firebase SDK logs (like offline timeouts) to prevent them from triggering React Native error screens.
 setLogLevel("silent");
 
-const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
-};
+let app: any = null;
+let authObj: any = null;
+let dbObj: any = null;
 
-const app = initializeApp(firebaseConfig);
+try {
+  const firebaseConfig = {
+    apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "dummy-api-key",
+    authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "dummy-auth-domain",
+    projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "dummy-project-id",
+    storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "dummy-storage-bucket",
+    messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "dummy-sender-id",
+    appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "dummy-app-id",
+  };
 
-// The (as any) cast is necessary because the Firebase TS types 
-// often default to Web types instead of React Native types.
-export const auth = initializeAuth(app, {
-  persistence: (getReactNativePersistence as any)(AsyncStorage),
-});
+  app = initializeApp(firebaseConfig);
 
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-});
+  let persistence;
+  try {
+    if (typeof getReactNativePersistence === "function") {
+      persistence = getReactNativePersistence(AsyncStorage);
+    }
+  } catch (e) {
+    console.warn("Could not setup persistence:", e);
+  }
+
+  authObj = initializeAuth(app, persistence ? { persistence } : {});
+
+  dbObj = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+  });
+} catch (error) {
+  console.error("FATAL FIREBASE INIT ERROR:", error);
+}
+
+export const auth = authObj;
+export const db = dbObj;

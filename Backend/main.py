@@ -283,7 +283,7 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
 
     gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
     gemini_payload = {
-        "system_instruction": {
+        "systemInstruction": {
             "parts": {"text": system_instruction}
         },
         "contents": [

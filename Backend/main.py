@@ -2575,6 +2575,7 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
     prompt = (
         "You are an expert clinical psychologist assisting the 'Donna AI' therapy app. Analyze the precise emotional tone and therapeutic context of this conversation.\n"
         "Generate exactly 3 highly contextual, psychologically nuanced, and distinct options for what the user might want to say or explore next.\n"
+        "CRITICAL: The suggestions MUST directly respond to Donna's most recent message. Do not generate generic statements. If Donna asks a question, the suggestions should answer it.\n"
         "Crucially, if the user is distressed or expressing deep emotion, the suggestions MUST reflect a desire to process those feelings safely, not toxic positivity or sudden topic changes.\n"
         "Each option must be written in the first person (from the user's perspective, e.g. 'I feel...', 'Can we...', 'Actually, ...').\n"
         "Keep each suggestion extremely concise and brief (maximum 8-10 words).\n"
@@ -2583,8 +2584,9 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
     
     try:
         res = await safe_runpod_completion(
-            prompt=f"Conversation history:\n{conversation_str}\n\nWhat are the next 3 reply options?",
-            system_instruction=prompt
+            prompt=f"Conversation history:\n{conversation_str}\n\nWhat are the next 3 reply options for the User responding to Donna's last message?",
+            system_instruction=prompt,
+            temperature=0.7
         )
         reply = res.choices[0].message.content or ""
         # Parse output line by line

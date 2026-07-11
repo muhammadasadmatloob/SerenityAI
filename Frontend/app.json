@@ -41,9 +41,9 @@
         "expo-build-properties",
         {
           "android": {
-            "enableProguardInReleaseBuilds": true,
-            "shrinkResourcesInReleaseBuilds": true,
-            "enableMinifyInReleaseBuilds": true
+            "enableProguardInReleaseBuilds": false,
+            "shrinkResourcesInReleaseBuilds": false,
+            "enableMinifyInReleaseBuilds": false
           }
         }
       ]

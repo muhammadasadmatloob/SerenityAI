@@ -189,7 +189,7 @@ export default function ProfileScreen() {
               <DateTimePicker
                 value={startDate}
                 mode="date"
-                display="default"
+                display="calendar"
                 onChange={(event, selectedDate) => {
                   setShowStartPicker(false);
                   if (selectedDate) setStartDate(selectedDate);
@@ -201,7 +201,7 @@ export default function ProfileScreen() {
               <DateTimePicker
                 value={endDate}
                 mode="date"
-                display="default"
+                display="calendar"
                 minimumDate={startDate}
                 onChange={(event, selectedDate) => {
                   setShowEndPicker(false);

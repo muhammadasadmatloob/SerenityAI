@@ -2964,8 +2964,8 @@ async def generate_clinical_report(req: ReportGenerateRequest, uid: str = Depend
         raise HTTPException(status_code=404, detail="User not found")
         
     try:
-        start_date = datetime.datetime.fromisoformat(req.start_date.replace("Z", "+00:00"))
-        end_date = datetime.datetime.fromisoformat(req.end_date.replace("Z", "+00:00"))
+        start_date = datetime.datetime.fromisoformat(req.start_date.replace("Z", "+00:00")).replace(tzinfo=None)
+        end_date = datetime.datetime.fromisoformat(req.end_date.replace("Z", "+00:00")).replace(tzinfo=None)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format.")
     

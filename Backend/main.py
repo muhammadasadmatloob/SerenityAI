@@ -2417,11 +2417,11 @@ async def chat_voice(
     db.commit()
 
     # Memory Window Optimization
-    # Always include the very first user message of the session (to keep the core concern in focus)
-    first_user_msg = db.query(Message).filter_by(session_id=session_id, role="user").order_by(Message.timestamp.asc()).first()
+    # Always include the very first voice message of the session (to keep the core concern in focus)
+    first_user_msg = db.query(Message).filter(Message.session_id == session_id, Message.role == "user", Message.audio_url != None).order_by(Message.timestamp.asc()).first()
     
-    # Include the last 20 messages for recent conversational flow
-    last_20_msgs = db.query(Message).filter_by(session_id=session_id).order_by(Message.timestamp.desc()).limit(20).all()
+    # Include only the last 20 voice messages for a dedicated 'phone call' flow
+    last_20_msgs = db.query(Message).filter(Message.session_id == session_id, Message.audio_url != None).order_by(Message.timestamp.desc()).limit(20).all()
     last_20_msgs = list(reversed(last_20_msgs))
     
     context = []
@@ -2463,7 +2463,9 @@ async def chat_voice(
 
     # Inject acoustic voice features directly into system prompt for multi-modal fusion context
     voice_context_inject = (
-        f"\n\nCLIENT'S CURRENT VOCAL ACOUSTIC STATE (FUSED SIGNAL):\n"
+        f"\n\n[LIVE PHONE CALL INITIATED]\n"
+        f"You are currently on a live voice call with the user. Treat this exactly like a phone conversation. Keep your responses conversational, natural, and do not reference previous text chats.\n"
+        f"CLIENT'S CURRENT VOCAL ACOUSTIC STATE (FUSED SIGNAL):\n"
         f"- Detected Vocal Emotion: {voice_analysis['voice_emotion'].upper()}\n"
         f"- Speech Rate: {voice_analysis['speech_rate']} words per minute\n"
         f"- Energy (Volume RMS): {voice_analysis['energy']}\n"

@@ -197,7 +197,7 @@ async def safe_gemini_completion(prompt: str, system_instruction: str, max_token
     }
         
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",
+        model_name="gemini-1.5-flash",
         system_instruction=system_instruction,
         generation_config=genai.types.GenerationConfig(**generation_config_args),
         safety_settings=safety_settings
@@ -281,7 +281,7 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
     if not gemini_api_key:
         raise Exception("RunPod failed and GEMINI_API_KEY is not set for fallback")
 
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_api_key}"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
     gemini_payload = {
         "systemInstruction": {
             "parts": {"text": system_instruction}

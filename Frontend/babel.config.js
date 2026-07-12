@@ -15,9 +15,6 @@ module.exports = function (api) {
       "nativewind/babel",
     ],
     plugins: [
-      // Transform private class fields/methods before Hermes sees them
-      ["@babel/plugin-transform-class-properties", { loose: true }],
-      ["@babel/plugin-transform-private-methods", { loose: true }],
       [
         "module-resolver",
         {

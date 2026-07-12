@@ -53,6 +53,7 @@ logger = logging.getLogger("donna_ai")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
+    GEMINI_API_KEY = GEMINI_API_KEY.strip('"').strip("'")
     genai.configure(api_key=GEMINI_API_KEY)
 
 
@@ -197,7 +198,7 @@ async def safe_gemini_completion(prompt: str, system_instruction: str, max_token
     }
         
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name="gemini-3.1-flash-lite",
         system_instruction=system_instruction,
         generation_config=genai.types.GenerationConfig(**generation_config_args),
         safety_settings=safety_settings
@@ -280,8 +281,9 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
     gemini_api_key = os.getenv("GEMINI_API_KEY")
     if not gemini_api_key:
         raise Exception("RunPod failed and GEMINI_API_KEY is not set for fallback")
+    gemini_api_key = gemini_api_key.strip('"').strip("'")
 
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={gemini_api_key}"
     gemini_payload = {
         "systemInstruction": {
             "parts": {"text": system_instruction}

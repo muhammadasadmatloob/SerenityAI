@@ -101,7 +101,8 @@ export default function AuthScreen() {
         return;
       }
       const friendlyError = err.code?.split("/")[1]?.replace(/-/g, " ") || err.message;
-      Alert.alert("Entry Denied", friendlyError.toUpperCase());
+      const fullDetails = JSON.stringify(err, Object.getOwnPropertyNames(err));
+      Alert.alert("Entry Denied (v2)", `${friendlyError.toUpperCase()}\n\nDetails: ${fullDetails}`);
     } finally {
       setLoading(false);
     }

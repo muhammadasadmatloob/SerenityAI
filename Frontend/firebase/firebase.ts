@@ -13,12 +13,12 @@ let dbObj: any = null;
 
 try {
   const firebaseConfig = {
-    apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "dummy-api-key",
-    authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "dummy-auth-domain",
-    projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "dummy-project-id",
-    storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "dummy-storage-bucket",
-    messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "dummy-sender-id",
-    appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "dummy-app-id",
+    apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyCQE1edP7aquOKmt__HI6ig7Ipnoy3neEM",
+    authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "serenityfirebaseauthapp.firebaseapp.com",
+    projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "serenityfirebaseauthapp",
+    storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "serenityfirebaseauthapp.firebasestorage.app",
+    messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "912212577475",
+    appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:912212577475:web:aa446b15dd579af3aba676",
   };
 
   app = initializeApp(firebaseConfig);

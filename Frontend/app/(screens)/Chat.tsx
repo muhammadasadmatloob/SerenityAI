@@ -703,12 +703,8 @@ export default function ChatScreen() {
       updateConfirmationState(false);
       accumulatedTranscriptRef.current = "";
 
-      let welcomeMsg = "Hello! I'm Donna, your therapist. I'm here to listen. How are you feeling today?";
-      const lastMsg = history[history.length - 1];
-      if (lastMsg && lastMsg.sender === "ai") {
-        welcomeMsg = lastMsg.text;
-      }
-      await speakResponse(welcomeMsg);
+      // Based on user feedback: client speaks first like a real phone call
+      startCallListening();
     } catch (err) {
       console.log("Error starting call:", err);
       Alert.alert("Call Error", "Could not start voice call.");

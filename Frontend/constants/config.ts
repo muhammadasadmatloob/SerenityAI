@@ -71,7 +71,14 @@ const getDevServerIp = (): string | null => {
 
 const devIp = getDevServerIp();
 
-export const PRODUCTION_URL = process.env.EXPO_PUBLIC_PRODUCTION_URL || "https://serenityai-93qt.onrender.com";
+const getEnvValue = (value: any, defaultValue: string): string => {
+  if (!value || value === "undefined" || value === "null" || typeof value !== "string") {
+    return defaultValue;
+  }
+  return value.trim();
+};
+
+export const PRODUCTION_URL = getEnvValue(process.env.EXPO_PUBLIC_PRODUCTION_URL, "https://serenityai-93qt.onrender.com");
 
 // Initial URL setup (fallback defaults)
 let initialUrl = PRODUCTION_URL;

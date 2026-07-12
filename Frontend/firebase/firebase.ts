@@ -100,33 +100,47 @@ if (typeof global !== "undefined" && global.fetch) {
       // Explicitly delete Origin and Referer headers
       delete headers["origin"];
       delete headers["referer"];
-
       // Reconstruct fetch parameters
-      const newInit = { ...(init || {}) };
-      newInit.headers = headers;
-
-      // If the input is a Request object, we must rebuild it or bypass it
-      if (input && typeof input === "object" && input.constructor && input.constructor.name === "Request") {
-        try {
-          const reqBody = typeof input.text === "function" ? await input.text() : undefined;
-          const requestArgs: any = {
-            method: input.method,
-            headers: headers,
-            credentials: input.credentials,
-            mode: input.mode,
-            redirect: input.redirect,
-          };
-          if (reqBody && input.method !== "GET" && input.method !== "HEAD") {
-            requestArgs.body = reqBody;
-          }
-          const newRequest = new Request(url, requestArgs);
-          return originalFetch.apply(this, [newRequest]);
-        } catch (e) {
-          return originalFetch.apply(this, [url, newInit]);
+      let method = "GET";
+      let body: any = undefined;
+      
+      if (input && typeof input === "object") {
+        method = input.method || "GET";
+        if (typeof input.text === "function") {
+          try {
+            body = await input.text();
+          } catch (e) {}
+        } else if (input._bodyInit) {
+          body = input._bodyInit;
+        } else if (input._bodyText) {
+          body = input._bodyText;
         }
-      } else {
-        return originalFetch.apply(this, [url, newInit]);
       }
+      
+      if (init) {
+        if (init.method) method = init.method;
+        if (init.body) body = init.body;
+      }
+      
+      const fetchOptions: any = {
+        method: method,
+        headers: headers,
+      };
+      
+      if (body !== undefined && method !== "GET" && method !== "HEAD") {
+        fetchOptions.body = body;
+      }
+      
+      const credentials = (init && init.credentials) || (input && (input as any).credentials);
+      if (credentials) fetchOptions.credentials = credentials;
+      
+      const mode = (init && init.mode) || (input && (input as any).mode);
+      if (mode) fetchOptions.mode = mode;
+      
+      const redirect = (init && init.redirect) || (input && (input as any).redirect);
+      if (redirect) fetchOptions.redirect = redirect;
+      
+      return originalFetch.apply(this, [url, fetchOptions]);
     }
     return originalFetch.apply(this, [input, init]);
   };

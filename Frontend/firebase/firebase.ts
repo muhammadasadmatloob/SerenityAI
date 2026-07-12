@@ -7,7 +7,7 @@ import { initializeFirestore } from "firebase/firestore";
 // Intercept fetch requests to remove Origin/Referer headers that trigger Firebase API key restrictions on mobile.
 if (typeof global !== "undefined" && global.fetch) {
   const originalFetch = global.fetch;
-  global.fetch = function (input: any, init: any) {
+  global.fetch = async function (input: any, init: any) {
     let url = "";
     if (typeof input === "string") {
       url = input;
@@ -15,41 +15,117 @@ if (typeof global !== "undefined" && global.fetch) {
       url = (input as any).url;
     }
 
-    if (url && (url.includes("identitytoolkit.googleapis.com") || url.includes("securetoken.googleapis.com") || url.includes("googleapis.com"))) {
-      if (init && init.headers) {
-        if (typeof init.headers.delete === "function") {
-          try {
-            init.headers.delete("origin");
-            init.headers.delete("Origin");
-            init.headers.delete("referer");
-            init.headers.delete("Referer");
-          } catch (e) {}
-        } else if (typeof init.headers === "object") {
-          try {
-            delete init.headers["origin"];
-            delete init.headers["Origin"];
-            delete init.headers["referer"];
-            delete init.headers["Referer"];
-          } catch (e) {}
+    // Rewrite Firebase Authentication API calls to proxy through the backend, bypassing network/SSL blocks.
+    if (url && (url.includes("identitytoolkit.googleapis.com") || url.includes("securetoken.googleapis.com"))) {
+      const backendUrl = "https://serenityai-93qt.onrender.com";
+      let targetPath = "";
+      let apiKey = "";
+
+      if (url.includes("identitytoolkit.googleapis.com/")) {
+        const parts = url.split("identitytoolkit.googleapis.com/");
+        if (parts[1]) {
+          const pathAndQuery = parts[1];
+          const queryParts = pathAndQuery.split("?");
+          targetPath = queryParts[0];
+          if (queryParts[1]) {
+            const queryParams = queryParts[1].split("&");
+            for (const param of queryParams) {
+              const pair = param.split("=");
+              if (pair[0] === "key") {
+                apiKey = pair[1] || "";
+                break;
+              }
+            }
+          }
+        }
+      } else if (url.includes("securetoken.googleapis.com/")) {
+        const parts = url.split("securetoken.googleapis.com/");
+        if (parts[1]) {
+          const pathAndQuery = parts[1];
+          const queryParts = pathAndQuery.split("?");
+          targetPath = "securetoken/" + queryParts[0];
+          if (queryParts[1]) {
+            const queryParams = queryParts[1].split("&");
+            for (const param of queryParams) {
+              const pair = param.split("=");
+              if (pair[0] === "key") {
+                apiKey = pair[1] || "";
+                break;
+              }
+            }
+          }
         }
       }
+
+      if (targetPath) {
+        const proxyUrl = `${backendUrl}/api/auth/proxy?path=${encodeURIComponent(targetPath)}${apiKey ? `&key=${encodeURIComponent(apiKey)}` : ""}`;
+        console.log(`[Firebase Proxy] Redirecting: ${url} -> ${proxyUrl}`);
+        url = proxyUrl;
+      }
+    }
+
+    if (url && (url.includes("identitytoolkit.googleapis.com") || url.includes("securetoken.googleapis.com") || url.includes("googleapis.com") || url.includes("proxy?path="))) {
+      let headers: Record<string, string> = {};
       
-      if (input && typeof input === "object" && "headers" in input && input.headers) {
-        if (typeof input.headers.delete === "function") {
+      // Extract existing headers from init
+      if (init && init.headers) {
+        if (typeof init.headers.forEach === "function") {
           try {
-            input.headers.delete("origin");
-            input.headers.delete("Origin");
-            input.headers.delete("referer");
-            input.headers.delete("Referer");
+            init.headers.forEach((value: string, key: string) => {
+              headers[key.toLowerCase()] = value;
+            });
+          } catch (e) {}
+        } else if (typeof init.headers === "object") {
+          for (const key in init.headers) {
+            headers[key.toLowerCase()] = init.headers[key];
+          }
+        }
+      }
+
+      // Extract existing headers from input Request object if applicable
+      if (input && typeof input === "object" && "headers" in input && input.headers) {
+        if (typeof input.headers.forEach === "function") {
+          try {
+            input.headers.forEach((value: string, key: string) => {
+              headers[key.toLowerCase()] = value;
+            });
           } catch (e) {}
         } else if (typeof input.headers === "object") {
-          try {
-            delete input.headers["origin"];
-            delete input.headers["Origin"];
-            delete input.headers["referer"];
-            delete input.headers["Referer"];
-          } catch (e) {}
+          for (const key in input.headers) {
+            headers[key.toLowerCase()] = input.headers[key];
+          }
         }
+      }
+
+      // Explicitly delete Origin and Referer headers
+      delete headers["origin"];
+      delete headers["referer"];
+
+      // Reconstruct fetch parameters
+      const newInit = { ...(init || {}) };
+      newInit.headers = headers;
+
+      // If the input is a Request object, we must rebuild it or bypass it
+      if (input && typeof input === "object" && input.constructor && input.constructor.name === "Request") {
+        try {
+          const reqBody = typeof input.text === "function" ? await input.text() : undefined;
+          const requestArgs: any = {
+            method: input.method,
+            headers: headers,
+            credentials: input.credentials,
+            mode: input.mode,
+            redirect: input.redirect,
+          };
+          if (reqBody && input.method !== "GET" && input.method !== "HEAD") {
+            requestArgs.body = reqBody;
+          }
+          const newRequest = new Request(url, requestArgs);
+          return originalFetch.apply(this, [newRequest]);
+        } catch (e) {
+          return originalFetch.apply(this, [url, newInit]);
+        }
+      } else {
+        return originalFetch.apply(this, [url, newInit]);
       }
     }
     return originalFetch.apply(this, [input, init]);

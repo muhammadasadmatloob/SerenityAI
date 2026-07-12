@@ -18,7 +18,7 @@ import threading
 import atexit
 import uvicorn
 import firebase_admin
-from fastapi import FastAPI, Depends, Header, HTTPException, Request, UploadFile, File, Form, BackgroundTasks
+from fastapi import FastAPI, Depends, Header, HTTPException, Request, Response, UploadFile, File, Form, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.exceptions import RequestValidationError
@@ -553,6 +553,46 @@ def check_password_strength(data: PasswordCheck):
             }
         )
     return {"success": True, "message": "Password meets all requirements.", "code": "PASSWORD_VALID"}
+
+@app.api_route("/api/auth/proxy", methods=["GET", "POST"])
+async def firebase_auth_proxy(request: Request, path: str, key: str = ""):
+    """Proxy Firebase Authentication requests to bypass network/CORS restrictions."""
+    if path.startswith("securetoken/"):
+        target_path = path.replace("securetoken/", "")
+        target_url = f"https://securetoken.googleapis.com/{target_path}"
+    else:
+        target_url = f"https://identitytoolkit.googleapis.com/{path}"
+        
+    if key:
+        target_url += f"?key={key}"
+        
+    body = await request.body()
+    
+    headers = {}
+    for h_name, h_val in request.headers.items():
+        if h_name.lower() not in ["host", "origin", "referer", "content-length", "connection"]:
+            headers[h_name] = h_val
+            
+    async with httpx.AsyncClient() as client:
+        try:
+            if request.method == "POST":
+                resp = await client.post(target_url, content=body, headers=headers, timeout=30.0)
+            else:
+                resp = await client.get(target_url, headers=headers, timeout=30.0)
+                
+            headers_dict = dict(resp.headers)
+            headers_dict.pop("transfer-encoding", None)
+            headers_dict.pop("content-encoding", None)
+            
+            return Response(
+                content=resp.content,
+                status_code=resp.status_code,
+                headers=headers_dict,
+                media_type=resp.headers.get("content-type")
+            )
+        except Exception as e:
+            logger.error(f"Proxy request failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/transcribe")
 def transcribe_audio(file: UploadFile = File(...), uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):

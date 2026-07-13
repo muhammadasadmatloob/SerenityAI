@@ -114,34 +114,17 @@ export default function Hero3D() {
           </div>
         </div>
 
-        {/* Right Column: Realistic Flat Android Mockup */}
+        {/* Right Column: Raw App Screenshot */}
         <div className="flex-1 w-full flex justify-center lg:justify-end relative">
-          
           {/* Glowing Aura Matching Theme */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[110%] bg-accent/20 blur-[120px] rounded-full pointer-events-none" />
           
-          {/* Realistic Android Phone Mockup Wrapper */}
-          <div 
-            className="relative z-10 w-[280px] h-[580px] sm:w-[300px] sm:h-[620px] lg:w-[320px] lg:h-[660px] bg-[#000000] rounded-[2.5rem] p-[5px] shadow-[0_30px_60px_rgba(0,0,0,0.8),_0_0_40px_rgba(59,130,246,0.2)] border-[1.5px] border-[#333333] transition-transform duration-1000 ease-in-out hover:-translate-y-2"
+          <img 
+            src="/app_screenshot.png" 
+            alt="Serenity AI App" 
+            className="relative z-10 w-full max-w-[280px] sm:max-w-[320px] h-auto rounded-[2rem] shadow-2xl transition-transform duration-1000 hover:-translate-y-2"
             style={{ animation: 'float-vertical 6s ease-in-out infinite' }}
-          >
-            {/* Android Hardware Buttons (Usually all on the right) */}
-            <div className="absolute top-[130px] -right-[2px] w-[3px] h-[60px] bg-[#333] rounded-r-md" /> {/* Volume Rocker */}
-            <div className="absolute top-[220px] -right-[2px] w-[3px] h-[40px] bg-[#333] rounded-r-md" /> {/* Power Button */}
-            <div className="absolute top-[40px] right-[10px] w-[50px] h-[4px] bg-[#222] rounded-full opacity-30 rotate-45 pointer-events-none" /> {/* Antenna line */}
-
-            {/* Inner Screen Container */}
-            <div className="relative w-full h-full bg-white rounded-[2.2rem] overflow-hidden flex flex-col shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
-              
-              {/* THE USER'S EXACT SCREENSHOT */}
-              <img 
-                src="/app_screenshot.jpg" 
-                alt="Serenity AI Chat Interface" 
-                className="w-full h-full object-cover relative z-0"
-              />
-            </div>
-          </div>
-
+          />
         </div>
         
       </div>

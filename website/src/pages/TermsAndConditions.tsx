@@ -5,32 +5,32 @@ import Footer from '../components/Footer';
 
 export default function TermsAndConditions() {
   return (
-    <div className="min-h-screen bg-secondary text-slate-300">
+    <div className="min-h-screen bg-background text-text-muted">
       <Helmet>
         <title>Terms and Conditions | Serenity AI</title>
       </Helmet>
       
-      <div className="max-w-4xl mx-auto px-6 py-20">
-        <Link to="/" className="inline-flex items-center gap-2 text-primary-light hover:text-white mb-12 transition-colors">
+      <div className="max-w-3xl mx-auto px-6 py-20">
+        <Link to="/" className="inline-flex items-center gap-2 text-text-main hover:text-accent mb-12 transition-colors">
           <ArrowLeft className="w-5 h-5" />
           Back to Home
         </Link>
         
-        <h1 className="text-4xl font-bold text-white mb-8">Terms and Conditions</h1>
+        <h1 className="text-4xl font-bold text-text-main mb-8 tracking-tight">Terms and Conditions</h1>
         
-        <div className="prose prose-invert prose-emerald max-w-none space-y-6">
+        <div className="prose prose-invert max-w-none space-y-6 text-text-muted">
           <p>Last updated: July 2026</p>
           
-          <h2 className="text-2xl font-semibold text-white mt-8 mb-4">1. Acceptance of Terms</h2>
+          <h2 className="text-2xl font-semibold text-text-main mt-10 mb-4">1. Acceptance of Terms</h2>
           <p>By accessing and downloading the Serenity AI mobile application, you accept and agree to be bound by the terms and provision of this agreement.</p>
           
-          <h2 className="text-2xl font-semibold text-white mt-8 mb-4">2. Not a Medical Device</h2>
+          <h2 className="text-2xl font-semibold text-text-main mt-10 mb-4">2. Not a Medical Device</h2>
           <p>Serenity AI provides a therapeutic companion powered by Artificial Intelligence. <strong>It is NOT a replacement for professional medical advice, diagnosis, or psychiatric treatment.</strong> If you are in crisis, please contact your local emergency services immediately.</p>
           
-          <h2 className="text-2xl font-semibold text-white mt-8 mb-4">3. User Data & Privacy</h2>
+          <h2 className="text-2xl font-semibold text-text-main mt-10 mb-4">3. User Data & Privacy</h2>
           <p>We respect your privacy. All chat logs and voice recordings are encrypted. By using this service, you consent to our data processing as outlined in our Privacy Policy. Voice recordings are processed in real-time and are not stored in plain-text.</p>
           
-          <h2 className="text-2xl font-semibold text-white mt-8 mb-4">4. Limitation of Liability</h2>
+          <h2 className="text-2xl font-semibold text-text-main mt-10 mb-4">4. Limitation of Liability</h2>
           <p>In no event shall Serenity AI, nor its developers, be liable for any indirect, consequential, or special liability arising out of or in any way related to your use of this application.</p>
         </div>
       </div>

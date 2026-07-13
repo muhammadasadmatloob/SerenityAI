@@ -122,7 +122,7 @@ export default function Hero3D() {
           <img 
             src="/app_screenshot.png" 
             alt="Serenity AI App" 
-            className="relative z-10 w-full max-w-[320px] sm:max-w-[400px] lg:max-w-[460px] h-auto rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5),_0_0_40px_rgba(59,130,246,0.15)] transition-transform duration-1000 hover:-translate-y-2"
+            className="relative z-10 w-full max-w-[320px] sm:max-w-[400px] lg:max-w-[460px] h-auto rounded-[2rem] transition-transform duration-1000 hover:-translate-y-2"
             style={{ animation: 'float-vertical 6s ease-in-out infinite' }}
           />
         </div>

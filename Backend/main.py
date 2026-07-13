@@ -283,7 +283,7 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
         raise Exception("RunPod failed and GEMINI_API_KEY is not set for fallback")
     gemini_api_key = gemini_api_key.strip('"').strip("'")
 
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_api_key}"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={gemini_api_key}"
     gemini_payload = {
         "systemInstruction": {
             "parts": {"text": system_instruction}
@@ -3043,12 +3043,12 @@ async def generate_clinical_report(req: ReportGenerateRequest, uid: str = Depend
     data_dump = {
         "user_name": user.name,
         "report_period": f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
-        "generated_on": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+        "generated_on": datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
         "total_sessions": len(sessions),
-        "total_duration_minutes": sum(s.duration_seconds for s in sessions) // 60,
-        "average_mood": round(sum(m.mood_score for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
-        "average_anxiety": round(sum(m.anxiety_score for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
-        "average_stress": round(sum(m.stress_score for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
+        "total_duration_minutes": sum((s.duration_seconds or 0) for s in sessions) // 60,
+        "average_mood": round(sum((m.mood_score or 0) for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
+        "average_anxiety": round(sum((m.anxiety_score or 0) for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
+        "average_stress": round(sum((m.stress_score or 0) for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
         "crisis_events_count": len(crisis_events),
         "treatment_plans": [{"focus": p.focus_area, "progress": p.progress} for p in treatment_plans],
         "session_summaries": [s.summary_data for s in summaries]

@@ -1,4 +1,5 @@
 import { useMemo, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Points, PointMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -90,7 +91,12 @@ export default function Hero3D() {
       <div className="relative z-10 w-full max-w-7xl mx-auto px-6 py-24 flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-8">
         
         {/* Left Column: Text Content */}
-        <div className="flex-1 flex flex-col items-start text-left w-full max-w-2xl">
+        <motion.div 
+          initial={{ opacity: 0, x: -30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          className="flex-1 flex flex-col items-start text-left w-full max-w-2xl"
+        >
           <div className="inline-flex items-center px-4 py-1.5 mb-8 text-sm font-medium text-text-muted bg-surface border border-border rounded-full shadow-sm backdrop-blur-md">
             Clinical-Grade AI Therapy
           </div>
@@ -112,10 +118,15 @@ export default function Hero3D() {
               Explore Features
             </a>
           </div>
-        </div>
+        </motion.div>
 
         {/* Right Column: Raw App Screenshot */}
-        <div className="flex-1 w-full flex justify-center lg:justify-end relative">
+        <motion.div 
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
+          className="flex-1 w-full flex justify-center lg:justify-end relative"
+        >
           {/* Glowing Aura Matching Theme */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[110%] bg-accent/20 blur-[120px] rounded-full pointer-events-none" />
           
@@ -125,7 +136,7 @@ export default function Hero3D() {
             className="relative z-10 w-full max-w-[320px] sm:max-w-[400px] lg:max-w-[460px] h-auto rounded-[2rem] transition-transform duration-1000 hover:-translate-y-2"
             style={{ animation: 'float-vertical 6s ease-in-out infinite' }}
           />
-        </div>
+        </motion.div>
         
       </div>
       

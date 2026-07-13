@@ -1,4 +1,5 @@
 import { Brain, Mic, ShieldCheck, HeartPulse } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 const features = [
   {
@@ -28,17 +29,33 @@ export default function Features() {
     <section id="features" className="py-24 bg-background relative z-10 border-b border-border">
       <div className="max-w-6xl mx-auto px-6">
         <div className="text-center mb-20">
-          <h2 className="text-3xl md:text-5xl font-bold text-text-main mb-4 tracking-tight">
+          <motion.h2 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="text-3xl md:text-5xl font-bold text-text-main mb-4 tracking-tight"
+          >
             Built for Mental Wellness
-          </h2>
-          <p className="text-lg text-text-muted max-w-2xl mx-auto font-normal">
+          </motion.h2>
+          <motion.p 
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.6, ease: "easeOut", delay: 0.1 }}
+            className="text-lg text-text-muted max-w-2xl mx-auto font-normal"
+          >
             A foundation of clinical psychology, lightning-fast AI, and strict data privacy.
-          </p>
+          </motion.p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
           {features.map((feat, idx) => (
-            <div 
+            <motion.div 
+              initial={{ opacity: 0, y: 40 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, ease: "easeOut", delay: idx * 0.1 }}
               key={idx} 
               className="bg-surface border border-border p-8 rounded-2xl hover:bg-surface-hover transition-colors"
             >
@@ -49,7 +66,7 @@ export default function Features() {
               <p className="text-text-muted text-base leading-relaxed">
                 {feat.description}
               </p>
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>

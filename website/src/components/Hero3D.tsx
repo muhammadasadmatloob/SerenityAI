@@ -1,10 +1,45 @@
+import { useRef } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { MeshDistortMaterial, Sphere } from '@react-three/drei';
+
+function AnimatedBackground() {
+  const meshRef = useRef<any>(null);
+
+  useFrame((state) => {
+    if (meshRef.current) {
+      meshRef.current.distort = 0.4 + Math.sin(state.clock.elapsedTime) * 0.1;
+      meshRef.current.rotation.x = state.clock.elapsedTime * 0.2;
+      meshRef.current.rotation.y = state.clock.elapsedTime * 0.1;
+    }
+  });
+
+  return (
+    <Sphere ref={meshRef} args={[1, 64, 64]} position={[2, 0, -2]} scale={1.5}>
+      <MeshDistortMaterial
+        color="#3B82F6"
+        attach="material"
+        distort={0.4}
+        speed={1.5}
+        roughness={0}
+        metalness={0.8}
+        transparent
+        opacity={0.3}
+      />
+    </Sphere>
+  );
+}
+
 export default function Hero3D() {
   return (
     <div className="relative w-full min-h-screen bg-background overflow-hidden flex items-center border-b border-border">
       
-      {/* Clean Background Pattern */}
-      <div className="absolute inset-0 z-0 opacity-[0.03]" 
-           style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '32px 32px' }}>
+      {/* 3D Background */}
+      <div className="absolute inset-0 z-0 opacity-50">
+        <Canvas camera={{ position: [0, 0, 5] }}>
+          <ambientLight intensity={1} />
+          <directionalLight position={[2, 2, 2]} intensity={2} />
+          <AnimatedBackground />
+        </Canvas>
       </div>
 
       <div className="relative z-10 w-full max-w-7xl mx-auto px-6 py-24 flex flex-col lg:flex-row items-center justify-between gap-12 lg:gap-8">
@@ -37,21 +72,15 @@ export default function Hero3D() {
         {/* Right Column: App Image */}
         <div className="flex-1 w-full flex justify-center lg:justify-end relative">
           
-          {/* Decorative glow behind the phone */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-accent/20 blur-[100px] rounded-full pointer-events-none" />
           
           {/* Phone Mockup Container */}
-          <div className="relative z-10 w-full max-w-[320px] sm:max-w-[380px] lg:max-w-[400px] rounded-[3rem] overflow-hidden border-[8px] border-surface shadow-2xl bg-surface flex items-center justify-center">
+          <div className="relative z-10 w-full max-w-[320px] sm:max-w-[380px] lg:max-w-[420px] rounded-[3rem] overflow-hidden border-[8px] border-surface shadow-2xl bg-surface flex items-center justify-center transform hover:scale-[1.02] transition-transform duration-500">
             
-            {/* The user's uploaded image goes here */}
             <img 
               src="/app_screenshot.png" 
               alt="Serenity AI Chat Interface" 
               className="w-full h-auto object-cover rounded-[2.5rem]"
-              onError={(e) => {
-                // Fallback if the user hasn't added the image yet
-                (e.target as HTMLImageElement).src = 'https://via.placeholder.com/400x850/0A0A0A/FFFFFF?text=Please+add+app_screenshot.png';
-              }}
             />
 
           </div>

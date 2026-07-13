@@ -139,7 +139,7 @@ export default function Hero3D() {
 
             {/* THE USER'S EXACT SCREENSHOT */}
             <img 
-              src="/app_screenshot.png" 
+              src="/app_screenshot.jpg" 
               alt="Serenity AI Chat Interface" 
               className="w-full h-auto object-cover relative z-0"
             />

@@ -111,36 +111,41 @@ export default function Hero3D() {
           </div>
         </div>
 
-        {/* Right Column: 3D CSS App Mockup */}
-        <div className="flex-1 w-full flex justify-center lg:justify-end relative perspective-[2000px]">
+        {/* Right Column: Realistic Flat App Mockup */}
+        <div className="flex-1 w-full flex justify-center lg:justify-end relative">
           
           {/* Glowing Aura Matching Theme */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[110%] bg-accent/25 blur-[120px] rounded-full pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[110%] bg-accent/20 blur-[120px] rounded-full pointer-events-none" />
           
-          {/* 3D Phone Mockup Container - Scaled Down, Added Floating Animation and Deep 3D Shadow */}
+          {/* Realistic iPhone Mockup Wrapper */}
           <div 
-            className="relative z-10 w-full max-w-[260px] sm:max-w-[280px] lg:max-w-[310px] rounded-[2.5rem] overflow-hidden border-[8px] border-[#262626] bg-[#000000] shadow-[-20px_20px_50px_rgba(0,0,0,0.9),_-10px_10px_30px_rgba(59,130,246,0.3)] flex items-center justify-center transition-all duration-1000 ease-in-out hover:scale-[1.05]"
-            style={{ 
-              transform: 'perspective(1500px) rotateY(-20deg) rotateX(10deg) rotateZ(-2deg)', 
-              transformStyle: 'preserve-3d',
-              animation: 'float 6s ease-in-out infinite'
-            }}
+            className="relative z-10 w-[280px] h-[580px] sm:w-[300px] sm:h-[620px] lg:w-[320px] lg:h-[660px] bg-[#000000] rounded-[3.5rem] p-[8px] shadow-[0_30px_60px_rgba(0,0,0,0.8),_0_0_40px_rgba(59,130,246,0.2)] border-[1.5px] border-[#333333] transition-transform duration-1000 ease-in-out hover:-translate-y-2"
+            style={{ animation: 'float-vertical 6s ease-in-out infinite' }}
           >
-            {/* Phone Hardware Details (Dynamic Island / Notch) */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90px] h-[22px] bg-[#262626] rounded-b-[1rem] z-20 flex items-center justify-center">
-              {/* Speaker grill */}
-              <div className="w-10 h-1 bg-[#0a0a0a] rounded-full"></div>
-            </div>
-            
-            {/* Glossy Screen Glare Effect for 3D realism */}
-            <div className="absolute inset-0 z-10 bg-gradient-to-tr from-transparent via-white/15 to-transparent pointer-events-none mix-blend-overlay" />
+            {/* Hardware Buttons */}
+            <div className="absolute top-[110px] -left-[2px] w-[3px] h-[26px] bg-[#333] rounded-l-md" /> {/* Mute Switch */}
+            <div className="absolute top-[160px] -left-[2px] w-[3px] h-[55px] bg-[#333] rounded-l-md" /> {/* Vol Up */}
+            <div className="absolute top-[230px] -left-[2px] w-[3px] h-[55px] bg-[#333] rounded-l-md" /> {/* Vol Down */}
+            <div className="absolute top-[180px] -right-[2px] w-[3px] h-[80px] bg-[#333] rounded-r-md" /> {/* Power */}
+            <div className="absolute top-[40px] right-[10px] w-[50px] h-[4px] bg-[#222] rounded-full opacity-30 rotate-45 pointer-events-none" /> {/* Antenna line */}
 
-            {/* THE USER'S EXACT SCREENSHOT */}
-            <img 
-              src="/app_screenshot.jpg" 
-              alt="Serenity AI Chat Interface" 
-              className="w-full h-auto object-cover relative z-0"
-            />
+            {/* Inner Screen Container */}
+            <div className="relative w-full h-full bg-white rounded-[3rem] overflow-hidden flex flex-col shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
+              
+              {/* Dynamic Island / Camera Notch */}
+              <div className="absolute top-[12px] left-1/2 -translate-x-1/2 w-[90px] h-[28px] bg-black rounded-full z-20 flex items-center justify-end px-3 shadow-md">
+                <div className="w-3.5 h-3.5 rounded-full bg-[#111] border-[0.5px] border-[#333] shadow-[inset_0_0_4px_rgba(255,255,255,0.15)] flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#0a0a0a] shadow-[inset_0_0_2px_rgba(0,0,100,0.5)]" />
+                </div>
+              </div>
+              
+              {/* THE USER'S EXACT SCREENSHOT */}
+              <img 
+                src="/app_screenshot.jpg" 
+                alt="Serenity AI Chat Interface" 
+                className="w-full h-full object-cover relative z-0"
+              />
+            </div>
           </div>
 
         </div>
@@ -149,10 +154,10 @@ export default function Hero3D() {
       
       {/* Floating animation keyframes embedded */}
       <style>{`
-        @keyframes float {
-          0% { transform: perspective(1500px) rotateY(-20deg) rotateX(10deg) rotateZ(-2deg) translateY(0px); }
-          50% { transform: perspective(1500px) rotateY(-20deg) rotateX(10deg) rotateZ(-2deg) translateY(-20px); }
-          100% { transform: perspective(1500px) rotateY(-20deg) rotateX(10deg) rotateZ(-2deg) translateY(0px); }
+        @keyframes float-vertical {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-15px); }
+          100% { transform: translateY(0px); }
         }
       `}</style>
     </div>

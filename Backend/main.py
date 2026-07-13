@@ -283,7 +283,7 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
         raise Exception("RunPod failed and GEMINI_API_KEY is not set for fallback")
     gemini_api_key = gemini_api_key.strip('"').strip("'")
 
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={gemini_api_key}"
+    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_api_key}"
     gemini_payload = {
         "systemInstruction": {
             "parts": {"text": system_instruction}

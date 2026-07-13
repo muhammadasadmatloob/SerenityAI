@@ -117,21 +117,34 @@ export default function Hero3D() {
           </div>
         </div>
 
-        {/* Right Column: App Image */}
+        {/* Right Column: 3D CSS App Mockup */}
         <div className="flex-1 w-full flex justify-center lg:justify-end relative">
           
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-accent/20 blur-[120px] rounded-full pointer-events-none" />
+          {/* Glowing Aura Matching Theme */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[130%] h-[130%] bg-accent/20 blur-[120px] rounded-full pointer-events-none" />
           
-          {/* Phone Mockup Container */}
-          <div className="relative z-10 w-full max-w-[320px] sm:max-w-[380px] lg:max-w-[420px] rounded-[3rem] overflow-hidden border-[8px] border-surface shadow-2xl bg-surface flex items-center justify-center transform hover:scale-[1.02] transition-transform duration-500">
+          {/* 3D Phone Mockup Container */}
+          <div 
+            className="relative z-10 w-full max-w-[300px] sm:max-w-[340px] lg:max-w-[360px] rounded-[3rem] overflow-hidden border-[10px] border-[#171717] bg-white shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8),_0_0_40px_rgba(59,130,246,0.2)] flex items-center justify-center transition-transform duration-700 hover:rotate-0"
+            style={{ transform: 'perspective(1200px) rotateY(-12deg) rotateX(4deg) rotateZ(-2deg)', transformStyle: 'preserve-3d' }}
+          >
+            {/* Phone Hardware Details (Dynamic Island / Notch) */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[100px] h-[25px] bg-[#171717] rounded-b-2xl z-20 flex items-center justify-center">
+              {/* Speaker grill */}
+              <div className="w-12 h-1.5 bg-[#0a0a0a] rounded-full"></div>
+            </div>
             
+            {/* Screen Glare Effect for 3D realism */}
+            <div className="absolute inset-0 z-10 bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none" />
+
+            {/* THE USER'S EXACT SCREENSHOT */}
             <img 
               src="/app_screenshot.png" 
               alt="Serenity AI Chat Interface" 
-              className="w-full h-auto object-cover rounded-[2.5rem]"
+              className="w-full h-auto object-cover relative z-0"
             />
-
           </div>
+
         </div>
         
       </div>

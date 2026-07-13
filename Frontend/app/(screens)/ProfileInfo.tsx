@@ -6,12 +6,14 @@ import { useRouter } from "expo-router";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
 import { saveUserInfo } from "../../firebase/firebaseConfig";
+import * as Location from 'expo-location';
 
 export default function ProfileInfoScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [data, setData] = useState<any>({});
+  const [address, setAddress] = useState("Locating...");
   const scrollRef = useRef<ScrollView>(null);
 
   const loadData = async () => {
@@ -29,7 +31,37 @@ export default function ProfileInfoScreen() {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { 
+    loadData(); 
+
+    let locationSubscription: Location.LocationSubscription | null = null;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setAddress("Permission Denied");
+        return;
+      }
+      locationSubscription = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
+        async (loc) => {
+          setData((prev: any) => ({ ...prev, lat: loc.coords.latitude, lng: loc.coords.longitude }));
+          const [place] = await Location.reverseGeocodeAsync({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude
+          });
+          if (place) {
+            const formatted = [place.name, place.district, place.city, place.country].filter(Boolean).join(", ");
+            setAddress(formatted);
+          } else {
+            setAddress(`${loc.coords.latitude.toFixed(2)}, ${loc.coords.longitude.toFixed(2)}`);
+          }
+        }
+      );
+    })();
+    return () => {
+      if (locationSubscription) locationSubscription.remove();
+    };
+  }, []);
 
   // Auto-scroll to the focused input so it stays visible above the keyboard
   const handleInputFocus = (yOffset: number) => {
@@ -116,14 +148,13 @@ export default function ProfileInfoScreen() {
 
           {/* --- READ ONLY SECTION --- */}
           <View className="bg-white p-6 rounded-3xl mb-6 shadow-sm border border-gray-100">
-              <InfoRow icon={<Fingerprint size={18} color="#94A3B8"/>} label="User ID" value={data.uid} />
               <InfoRow icon={<Mail size={18} color="#94A3B8"/>} label="Email Address" value={data.email} />
               <InfoRow icon={<Calendar size={18} color="#94A3B8"/>} label="Birth Date" value={data.dob?.split('T')[0] || "Not Set"} />
               <InfoRow icon={<User size={18} color="#94A3B8"/>} label="Gender" value={data.gender || "Not Set"} />
               <InfoRow 
                   icon={<MapPin size={18} color="#94A3B8"/>} 
-                  label="Last Synced Location" 
-                  value={data.lat ? `${data.lat.toFixed(2)}, ${data.lng.toFixed(2)}` : "Not available"} 
+                  label="Current Location" 
+                  value={address} 
               />
           </View>
 
@@ -139,14 +170,31 @@ export default function ProfileInfoScreen() {
           </View>
 
           <Text className="font-bold mb-2 text-gray-700 ml-1">Gender</Text>
-          <View onLayout={(e) => { genderY = e.nativeEvent.layout.y; }}>
-            <TextInput 
-                value={data.gender} 
-                placeholder="Enter gender (e.g. Male, Female, Other)"
-                onChangeText={(t) => setData({...data, gender: t})} 
-                onFocus={() => handleInputFocus(genderY)}
-                className="bg-white p-5 rounded-2xl mb-6 border border-gray-100 shadow-sm text-gray-800" 
-            />
+          <View className="flex-row justify-between mb-6" onLayout={(e) => { genderY = e.nativeEvent.layout.y; }}>
+            {["Male", "Female", "Other"].map((g) => {
+              const isSel = data.gender === g;
+              return (
+                <TouchableOpacity
+                  key={g}
+                  onPress={() => {
+                    setData({...data, gender: g});
+                    handleInputFocus(genderY);
+                  }}
+                  style={{
+                    backgroundColor: isSel ? "#808CEA" : "#FFFFFF",
+                    borderColor: isSel ? "#808CEA" : "#E2E8F0",
+                    borderWidth: 1,
+                    paddingVertical: 16,
+                    borderRadius: 20,
+                    flex: 1,
+                    marginHorizontal: 4,
+                    alignItems: "center"
+                  }}
+                >
+                  <Text style={{ color: isSel ? "#FFFFFF" : "#1F2937", fontWeight: "bold" }}>{g}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           <View 

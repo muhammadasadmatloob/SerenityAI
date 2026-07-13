@@ -3039,6 +3039,7 @@ async def generate_clinical_report(req: ReportGenerateRequest, uid: str = Depend
     data_dump = {
         "user_name": user.name,
         "report_period": f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}",
+        "generated_on": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
         "total_sessions": len(sessions),
         "total_duration_minutes": sum(s.duration_seconds for s in sessions) // 60,
         "average_mood": round(sum(m.mood_score for m in mood_entries) / len(mood_entries), 1) if mood_entries else 0,
@@ -3060,6 +3061,7 @@ Structure the report with the following sections:
 5. Recommendations
 
 Use elegant, professional styling. Use a clean white background with subtle gray borders, rounded corners, shadow effects, and clear typography (e.g., sans-serif).
+IMPORTANT: You MUST explicitly include the "generated_on" timestamp from the data exactly as it is provided as the "Report Generated Date" in the header of the report.
 IMPORTANT: Return ONLY the raw HTML string (no markdown blocks, no ```html tags, just the pure HTML code starting with <div and ending with </div>). Do not include <html> or <body> tags, just a container <div> that can be rendered directly.'''
 
     prompt = f"Patient Data for custom date range report:\n{json.dumps(data_dump, indent=2)}\n\nGenerate the Tailwind CSS styled HTML report now."

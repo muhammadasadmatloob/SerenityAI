@@ -8,6 +8,7 @@ import { MotiText, MotiView } from "moti";
 import React, { useMemo } from "react";
 import { Dimensions, Pressable, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const { width } = Dimensions.get("window");
 const TAB_WIDTH = width / 3;
@@ -24,6 +25,9 @@ export default function TabBar() {
   const isProfile = pathname.includes("Profile");
   const activeIndex = isChat ? 0 : isHistory ? 1 : 2;
 
+  const insets = useSafeAreaInsets();
+  const safeBottom = Math.max(insets.bottom, 0);
+
   // Professional Concave Curve Path
   const d = useMemo(() => {
     const center = activeIndex * TAB_WIDTH + TAB_WIDTH / 2;
@@ -33,11 +37,11 @@ export default function TabBar() {
       C${center - 30},0 ${center - 30},42 ${center},42 
       C${center + 30},42 ${center + 30},0 ${center + 50},0 
       L${width},0 
-      V${BAR_HEIGHT} 
+      V${BAR_HEIGHT + safeBottom} 
       H0 
       Z
     `;
-  }, [activeIndex]);
+  }, [activeIndex, safeBottom]);
 
   if (!isChat && !isHistory && !isProfile) return null;
 
@@ -49,12 +53,12 @@ export default function TabBar() {
 
   return (
     <View
-      style={{ height: BAR_HEIGHT, bottom: 0 }}
+      style={{ height: BAR_HEIGHT + safeBottom, bottom: 0 }}
       className="absolute w-full bg-transparent"
     >
       {/* 1. SVG Background (White Bar with Downward Notch) */}
       <View className="absolute inset-0">
-        <Svg width={width} height={BAR_HEIGHT + 20}>
+        <Svg width={width} height={BAR_HEIGHT + safeBottom + 20}>
           <Path fill="white" d={d} />
         </Svg>
       </View>

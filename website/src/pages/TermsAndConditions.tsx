@@ -5,13 +5,13 @@ import Footer from '../components/Footer';
 
 export default function TermsAndConditions() {
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-300">
+    <div className="min-h-screen bg-secondary text-slate-300">
       <Helmet>
         <title>Terms and Conditions | Serenity AI</title>
       </Helmet>
       
       <div className="max-w-4xl mx-auto px-6 py-20">
-        <Link to="/" className="inline-flex items-center gap-2 text-primary hover:text-emerald-400 mb-12 transition-colors">
+        <Link to="/" className="inline-flex items-center gap-2 text-primary-light hover:text-white mb-12 transition-colors">
           <ArrowLeft className="w-5 h-5" />
           Back to Home
         </Link>

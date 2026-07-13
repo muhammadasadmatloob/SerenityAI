@@ -1,0 +1,112 @@
+======================================================================
+SERENITY AI: FINAL YEAR PROJECT (FYP) COMPREHENSIVE PRESENTATION GUIDE
+======================================================================
+
+Use this document to prepare for your FYP defense. It covers every technical detail, workflow, architecture, and security measure of SerenityAI.
+
+----------------------------------------------------------------------
+1. WHAT IS SERENITY AI & HOW IT WORKS
+----------------------------------------------------------------------
+SerenityAI is a comprehensive mental wellness and therapeutic support application. It provides users with a 24/7 empathetic AI companion ("Donna") trained in clinical psychology principles (like Cognitive Behavioral Therapy - CBT). 
+
+How it works:
+Users open the app, log in securely, and perform a daily "Feel Check-in". Based on their emotional state, they engage in a highly contextual chat interface where they can type or speak to the AI. The AI remembers past conversations, detects subtle emotional cues in their voice and text, and responds with a customized, empathetic voice that adjusts its speed and pitch based on how the user is feeling. The app also generates analytical PDF reports of their emotional progress.
+
+----------------------------------------------------------------------
+2. LANGUAGES, FRAMEWORKS & LIBRARIES (AND WHY WE CHOSE THEM)
+----------------------------------------------------------------------
+
+FRONTEND (Mobile Application):
+* Languages: TypeScript & JavaScript
+* Framework: React Native & Expo
+  - Why? React Native allows us to build a cross-platform app (iOS and Android) using a single codebase, drastically reducing development time while maintaining native performance.
+* Styling: NativeWind (Tailwind CSS)
+  - Why? It provides utility-first styling directly in our components, making the UI highly responsive and easy to maintain.
+* Animations: Moti & React Native Reanimated
+  - Why? Mental health apps need to feel calming and organic. Moti allows us to create smooth, liquid micro-animations (like the pulsing speaker rings) that make the app feel alive rather than robotic.
+* Libraries: expo-av (for native audio playback and recording), expo-location (to pull live location for the profile), expo-speech (for local TTS backup).
+
+BACKEND (Server):
+* Language: Python 3.10+
+* Framework: FastAPI
+  - Why? FastAPI is one of the fastest Python frameworks available. It is asynchronous by default, which is critical for handling real-time audio streaming and AI generation without blocking the server.
+* Database ORM: SQLAlchemy
+  - Why? It allows us to interact securely with our PostgreSQL database using Python objects rather than raw, vulnerable SQL strings.
+
+DATABASES:
+* Authentication: Firebase Auth
+  - Why? Firebase is an industry standard for securely handling user sign-ups, passwords, and JWT token generation. We don't have to worry about password hashing ourselves.
+* Relational Data: PostgreSQL
+  - Why? PostgreSQL is highly robust and ACID-compliant. We use it to store relational data like Users, Sessions, and encrypted Messages.
+
+APIs & AI MODELS:
+* Google Generative AI (Gemini 3.1 Flash-Lite):
+  - Why? This acts as the "Brain" of the AI. It has a massive context window (to remember past sessions) and excellent reasoning capabilities for applying clinical psychology techniques.
+* Groq API (Whisper-Large-V3):
+  - Why? Groq utilizes specialized LPU (Language Processing Unit) hardware. This allows us to transcribe user voice messages into text with near-zero latency, which is required to mimic a real-time phone call.
+* Microsoft Edge-TTS:
+  - Why? Used to synthesize the AI's empathetic voice responses dynamically, providing high-quality, natural-sounding audio.
+
+----------------------------------------------------------------------
+3. HOW WE DETECT EMOTIONS (TEXT AND VOICE)
+----------------------------------------------------------------------
+Our emotion detection system is multi-layered and dynamic:
+
+1. Text-Based Semantic Analysis:
+When a user types or speaks (which is transcribed to text), the LLM (Gemini) acts as an analyzer. It doesn't just read the words; it looks for semantic markers. For instance, short, clipped sentences ("I'm fine.", "Whatever.") are flagged as withdrawal, frustration, or exhaustion. Deflection is flagged as protected pain.
+The system outputs a primary emotion (e.g., Anxiety, Sadness, Anger, Joy) along with an Intensity Score from 1 to 10.
+
+2. Voice & Tone Adaptation (The Output):
+Once the emotion and intensity are detected, the backend passes this data to the Edge-TTS engine to adjust the AI's speaking voice.
+* Example 1 (Anxiety): If high Anxiety (8/10) is detected, the backend algorithm calculates a reduction in speaking speed (e.g., -10%) and a slightly lower pitch. This ensures the AI sounds soothing, slow, and grounding.
+* Example 2 (Sadness): If Sadness is detected, the AI uses a softer, empathetic tone with reduced speed.
+* Example 3 (Anger): The AI responds with a grounded, highly steady, and calm tone to de-escalate the situation.
+
+----------------------------------------------------------------------
+4. APP WORKFLOW & DATA FLOW
+----------------------------------------------------------------------
+1. User Registration: User enters email/password. Firebase handles it and returns a secure UID.
+2. Database Creation: The backend creates a new User record in PostgreSQL using the Firebase UID.
+3. Profile Setup: User inputs their name, gender (Male/Female/Other), and the app fetches their Live Location.
+4. Session Initiation: The user hits the 'Feel' screen, selecting how they feel today. This creates a new "Session" in the PostgreSQL database.
+5. The Chat Loop:
+   * User records a voice message.
+   * Frontend sends the audio file to Backend (`/api/transcribe`).
+   * Backend uses Groq Whisper to transcribe the audio instantly.
+   * Backend sends the transcription + previous chat history to Gemini to get the AI's therapeutic response and Emotional Analysis.
+   * Backend encrypts both the user's message and the AI's message, saving them to PostgreSQL.
+   * Backend uses Edge-TTS to generate audio for the AI's response and sends the URL back to the frontend.
+   * Frontend plays the audio automatically.
+
+----------------------------------------------------------------------
+5. DATA MANAGEMENT, ENCRYPTION & SECURITY (CRITICAL FOR FYP)
+----------------------------------------------------------------------
+Mental health data is highly sensitive (HIPAA compliance concepts). Our architecture reflects strict security measures:
+
+1. Data Encryption at Rest:
+We NEVER store chat messages in plain-text. Before a message (user thought or AI response) is saved to the PostgreSQL database, it is encrypted using symmetric AES encryption via Python's `cryptography.fernet` library. If a hacker breaches the database, they will only see randomized ciphertext.
+
+2. Secure Token Authentication:
+The frontend does not just ask the backend for data. It sends a Firebase JWT (JSON Web Token) in the Authorization header. The FastAPI backend uses the Firebase Admin SDK to verify this token cryptographically before allowing access to any endpoint.
+
+3. Session Lifecycle Management:
+When the user minimizes or closes the app, a specialized lifecycle event (`end-all-active`) is triggered. The backend automatically marks the active database session as "ended" to prevent data leakage or orphaned sessions.
+
+----------------------------------------------------------------------
+6. POTENTIAL FYP DEFENSE QUESTIONS & ANSWERS
+----------------------------------------------------------------------
+
+Q: Why didn't you build and train your own LLM from scratch?
+A: Training a foundational model (like GPT or Gemini) requires millions of dollars in GPU compute and terabytes of specialized clinical data. Our innovation in this project is not building a neural network, but rather the *orchestration and prompt architecture*. We innovated by creating a system that seamlessly links ultra-fast transcription, long-term memory retrieval, and dynamic emotional voice synthesis (TTS adaptation) to create a therapeutic experience.
+
+Q: How does the system handle a user in a severe crisis (e.g., self-harm)?
+A: The system prompt includes strict clinical guardrails. If the AI detects crisis keywords, it safely pivots the conversation, refuses to act as a medical professional, and provides emergency hotline numbers. It prioritizes user safety over continuing the standard therapeutic dialogue.
+
+Q: Is the voice call actually real-time? How do you prevent lag?
+A: It operates in near real-time through a highly optimized pipeline. We bypass slow standard transcription by using Groq's LPU hardware for Whisper, which transcribes audio in milliseconds. We use Gemini Flash-Lite for incredibly fast text generation, and stream the resulting text directly into Edge-TTS. This tight pipeline mimics a real conversation.
+
+Q: Why use PostgreSQL instead of just storing everything in Firebase?
+A: While Firebase is great for authentication and simple NoSQL documents, a chat application generates complex relational data (Users have many Sessions, Sessions have many Messages, Messages have Analytics). PostgreSQL handles relational joins and complex queries much more efficiently and securely than NoSQL for this specific use case.
+
+Q: How do you ensure the AI doesn't sound robotic?
+A: Standard chatbots sound robotic because their voice is static. Our system analyzes the semantic emotion of the conversation in real-time and mathematically adjusts the pitch (Hz) and rate (%) of the TTS engine. If the user is anxious, the AI actively slows down its speaking rate to ground them.

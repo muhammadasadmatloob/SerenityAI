@@ -3,11 +3,12 @@ import { Send, LogOut, Phone, PhoneOff, Volume2, VolumeX, Mic, MicOff, Play, Pau
 import { MotiView } from "moti";
 import React, { useState, useEffect, useRef } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, Alert, Modal, Keyboard } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
 import { Audio } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Speech from 'expo-speech';
 
 const SUGGESTIONS = [
   "I'm feeling overwhelmed today.",
@@ -246,6 +247,25 @@ export default function ChatScreen() {
   const [activeId, setActiveId] = useState<string | null>(rawSessionId || null);
   const [message, setMessage] = useState("");
   const [history, setHistory] = useState<Message[]>([]);
+  const [playingMsgId, setPlayingMsgId] = useState<string | number | null>(null);
+  
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = 70 + Math.max(insets.bottom, 0);
+
+  const handlePlayTTS = async (id: string | number, text: string) => {
+    if (playingMsgId === id) {
+      Speech.stop();
+      setPlayingMsgId(null);
+    } else {
+      Speech.stop();
+      setPlayingMsgId(id);
+      Speech.speak(text, {
+        onDone: () => setPlayingMsgId(null),
+        onStopped: () => setPlayingMsgId(null),
+        onError: () => setPlayingMsgId(null),
+      });
+    }
+  };
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>(SUGGESTIONS);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -1253,9 +1273,9 @@ export default function ChatScreen() {
       </View>
 
       <KeyboardAvoidingView 
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 45}
+        style={{ flex: 1, marginBottom: tabBarHeight }}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        keyboardVerticalOffset={tabBarHeight}
       >
         {/* MESSAGES AREA */}
         <ScrollView
@@ -1307,9 +1327,23 @@ export default function ChatScreen() {
                     )}
                   </View>
                 ) : (
-                  <Text className="text-white text-[16px] leading-6 font-semibold tracking-wide">
-                    {msg.text}
-                  </Text>
+                  <View className="flex-row items-start justify-between">
+                    <Text className="text-white text-[16px] leading-6 font-semibold tracking-wide flex-1 mr-2">
+                      {msg.text}
+                    </Text>
+                    {msg.sender === "ai" && msg.text && (
+                      <TouchableOpacity 
+                        onPress={() => handlePlayTTS(msg.id, msg.text)} 
+                        className="bg-white/20 p-2 rounded-full shadow-sm ml-2"
+                      >
+                        {playingMsgId === msg.id ? (
+                          <Pause size={14} color="white" />
+                        ) : (
+                          <Play size={14} color="white" className="ml-0.5" />
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 )}
               </LinearGradient>
             </MotiView>
@@ -1355,7 +1389,7 @@ export default function ChatScreen() {
         {/* RESIZE AND OVERLAP FIXED CONTAINER */}
         <View 
           className="bg-transparent px-5 pt-4"
-          style={{ paddingBottom: isKeyboardVisible ? 12 : 85 }}
+          style={{ paddingBottom: 12 }}
         > 
           {/* SUGGESTION CHIPS */}
           {!sessionFinished && !loading && !isCallActive && suggestions.length > 0 && (

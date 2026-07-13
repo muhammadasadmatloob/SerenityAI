@@ -1327,14 +1327,14 @@ export default function ChatScreen() {
                     )}
                   </View>
                 ) : (
-                  <View className="flex-row items-start justify-between">
-                    <Text className="text-white text-[16px] leading-6 font-semibold tracking-wide flex-1 mr-2">
+                  <View>
+                    <Text className="text-white text-[16px] leading-6 font-semibold tracking-wide">
                       {msg.text}
                     </Text>
                     {msg.sender === "ai" && msg.text && (
                       <TouchableOpacity 
                         onPress={() => handlePlayTTS(msg.id, msg.text)} 
-                        className="bg-white/20 p-2 rounded-full shadow-sm ml-2"
+                        className="bg-white/20 p-1.5 rounded-full shadow-sm self-end mt-2"
                       >
                         {playingMsgId === msg.id ? (
                           <Pause size={14} color="white" />

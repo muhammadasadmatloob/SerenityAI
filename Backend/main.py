@@ -3026,6 +3026,10 @@ async def generate_clinical_report(req: ReportGenerateRequest, uid: str = Depend
         end_date = end_date + datetime.timedelta(days=1)
 
     sessions = db.query(UserSession).filter(UserSession.user_uid == uid, UserSession.created_at >= start_date, UserSession.created_at <= end_date).all()
+    
+    if not sessions:
+        raise HTTPException(status_code=400, detail="Not enough data: At least one session must be completed within the selected date range to generate a report.")
+        
     session_ids = [s.id for s in sessions]
     
     mood_entries = db.query(MoodEntry).filter(MoodEntry.user_uid == uid, MoodEntry.created_at >= start_date, MoodEntry.created_at <= end_date).all()

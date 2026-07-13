@@ -6,14 +6,12 @@ import * as THREE from 'three';
 function NeuralNetwork() {
   const ref = useRef<any>(null);
   
-  // Generate random points in a sphere to simulate neurons
   const { positions, linePositions } = useMemo(() => {
     const pts = [];
-    const radius = 3;
-    const numPoints = 120; // Enough points to look like a network, but low enough to be very fast
+    const radius = 3.5;
+    const numPoints = 120; 
 
     for (let i = 0; i < numPoints; i++) {
-      // Random point in sphere
       const u = Math.random();
       const v = Math.random();
       const theta = 2 * Math.PI * u;
@@ -26,7 +24,6 @@ function NeuralNetwork() {
       pts.push(new THREE.Vector3(x, y, z));
     }
 
-    // Create connections (synapses) between close points
     const lines = [];
     for (let i = 0; i < pts.length; i++) {
       for (let j = i + 1; j < pts.length; j++) {
@@ -51,19 +48,16 @@ function NeuralNetwork() {
 
   useFrame((state) => {
     if (ref.current) {
-      ref.current.rotation.y = state.clock.elapsedTime * 0.05;
-      ref.current.rotation.x = state.clock.elapsedTime * 0.02;
+      ref.current.rotation.y = state.clock.elapsedTime * 0.04;
+      ref.current.rotation.x = state.clock.elapsedTime * 0.015;
     }
   });
 
   return (
     <group ref={ref} position={[2, 0, -2]}>
-      {/* Nodes (Neurons) */}
       <Points positions={positions} stride={3} frustumCulled={false}>
         <PointMaterial transparent color="#3B82F6" size={0.06} sizeAttenuation={true} depthWrite={false} />
       </Points>
-      
-      {/* Synapses (Connections) */}
       {linePositions.length > 0 && (
          <lineSegments>
            <bufferGeometry>
@@ -118,24 +112,28 @@ export default function Hero3D() {
         </div>
 
         {/* Right Column: 3D CSS App Mockup */}
-        <div className="flex-1 w-full flex justify-center lg:justify-end relative">
+        <div className="flex-1 w-full flex justify-center lg:justify-end relative perspective-[2000px]">
           
           {/* Glowing Aura Matching Theme */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[130%] h-[130%] bg-accent/20 blur-[120px] rounded-full pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[110%] bg-accent/25 blur-[120px] rounded-full pointer-events-none" />
           
-          {/* 3D Phone Mockup Container */}
+          {/* 3D Phone Mockup Container - Scaled Down, Added Floating Animation and Deep 3D Shadow */}
           <div 
-            className="relative z-10 w-full max-w-[300px] sm:max-w-[340px] lg:max-w-[360px] rounded-[3rem] overflow-hidden border-[10px] border-[#171717] bg-white shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8),_0_0_40px_rgba(59,130,246,0.2)] flex items-center justify-center transition-transform duration-700 hover:rotate-0"
-            style={{ transform: 'perspective(1200px) rotateY(-12deg) rotateX(4deg) rotateZ(-2deg)', transformStyle: 'preserve-3d' }}
+            className="relative z-10 w-full max-w-[260px] sm:max-w-[280px] lg:max-w-[310px] rounded-[2.5rem] overflow-hidden border-[8px] border-[#262626] bg-[#000000] shadow-[-20px_20px_50px_rgba(0,0,0,0.9),_-10px_10px_30px_rgba(59,130,246,0.3)] flex items-center justify-center transition-all duration-1000 ease-in-out hover:scale-[1.05]"
+            style={{ 
+              transform: 'perspective(1500px) rotateY(-20deg) rotateX(10deg) rotateZ(-2deg)', 
+              transformStyle: 'preserve-3d',
+              animation: 'float 6s ease-in-out infinite'
+            }}
           >
             {/* Phone Hardware Details (Dynamic Island / Notch) */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[100px] h-[25px] bg-[#171717] rounded-b-2xl z-20 flex items-center justify-center">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90px] h-[22px] bg-[#262626] rounded-b-[1rem] z-20 flex items-center justify-center">
               {/* Speaker grill */}
-              <div className="w-12 h-1.5 bg-[#0a0a0a] rounded-full"></div>
+              <div className="w-10 h-1 bg-[#0a0a0a] rounded-full"></div>
             </div>
             
-            {/* Screen Glare Effect for 3D realism */}
-            <div className="absolute inset-0 z-10 bg-gradient-to-tr from-transparent via-white/10 to-transparent pointer-events-none" />
+            {/* Glossy Screen Glare Effect for 3D realism */}
+            <div className="absolute inset-0 z-10 bg-gradient-to-tr from-transparent via-white/15 to-transparent pointer-events-none mix-blend-overlay" />
 
             {/* THE USER'S EXACT SCREENSHOT */}
             <img 
@@ -148,6 +146,15 @@ export default function Hero3D() {
         </div>
         
       </div>
+      
+      {/* Floating animation keyframes embedded */}
+      <style>{`
+        @keyframes float {
+          0% { transform: perspective(1500px) rotateY(-20deg) rotateX(10deg) rotateZ(-2deg) translateY(0px); }
+          50% { transform: perspective(1500px) rotateY(-20deg) rotateX(10deg) rotateZ(-2deg) translateY(-20px); }
+          100% { transform: perspective(1500px) rotateY(-20deg) rotateX(10deg) rotateZ(-2deg) translateY(0px); }
+        }
+      `}</style>
     </div>
   );
 }

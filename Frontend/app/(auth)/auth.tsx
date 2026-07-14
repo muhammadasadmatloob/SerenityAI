@@ -114,7 +114,7 @@ export default function AuthScreen() {
       <LinearGradient colors={["#55C5CC", "#808CEA", "#A48CED"]} className="absolute inset-0" />
       <SafeAreaView className="flex-1">
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
           className="flex-1"
         >
           <ScrollView

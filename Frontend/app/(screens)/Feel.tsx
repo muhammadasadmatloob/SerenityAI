@@ -14,6 +14,8 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
@@ -245,11 +247,16 @@ export default function FeelScreen() {
   return (
     <View className="flex-1">
       <SafeAreaView className="flex-1">
-        <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}
-          showsVerticalScrollIndicator={false}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          className="flex-1"
         >
-          <View 
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View 
             style={{
               backgroundColor: "rgba(255, 255, 255, 0.22)",
               borderColor: "rgba(255, 255, 255, 0.35)",
@@ -357,6 +364,7 @@ export default function FeelScreen() {
             />
           </View>
         </ScrollView>
+        </KeyboardAvoidingView>
       </SafeAreaView>
 
       {/* --- CLINICAL WAVE TRANSLATION OVERLAY MODAL --- */}

@@ -247,6 +247,7 @@ export default function ChatScreen() {
   const [message, setMessage] = useState("");
   const [history, setHistory] = useState<Message[]>([]);
   const [playingMsgId, setPlayingMsgId] = useState<string | number | null>(null);
+  const [loadingTTSMsgId, setLoadingTTSMsgId] = useState<string | number | null>(null);
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
   
   const insets = useSafeAreaInsets();
@@ -269,7 +270,7 @@ export default function ChatScreen() {
         await currentSound.unloadAsync();
       }
 
-      setPlayingMsgId(id);
+      setLoadingTTSMsgId(id);
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
@@ -293,9 +294,12 @@ export default function ChatScreen() {
         }
       );
       
+      setLoadingTTSMsgId(null);
+      setPlayingMsgId(id);
       setCurrentSound(sound);
     } catch (err) {
       console.log("Error playing TTS:", err);
+      setLoadingTTSMsgId(null);
       setPlayingMsgId(null);
       setCurrentSound(null);
     }
@@ -1330,39 +1334,40 @@ export default function ChatScreen() {
           {history.map((msg, idx) => (
             <MotiView
               key={msg.id}
-              from={{ opacity: 0, scale: 0.9, translateY: 15 }}
-              animate={{ opacity: 1, scale: 1, translateY: 0 }}
-              transition={{ type: "spring", damping: 15, stiffness: 100 }}
+              from={{ opacity: 0, scale: 0.95, translateX: msg.sender === "user" ? 30 : -30, translateY: 10 }}
+              animate={{ opacity: 1, scale: 1, translateX: 0, translateY: 0 }}
+              transition={{ type: "spring", damping: 18, stiffness: 120 }}
               style={{
                 shadowColor: "#0F172A",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.06,
-                shadowRadius: 10,
-                elevation: 2,
-                overflow: 'hidden'
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: msg.sender === "user" ? 0.2 : 0.06,
+                shadowRadius: 16,
+                elevation: 3,
               }}
-              className={`rounded-[26px] mb-4 max-w-[82%] ${
+              className={`mb-4 max-w-[82%] ${
                 msg.sender === "user"
-                  ? "self-end rounded-tr-none"
-                  : "self-start rounded-tl-none"
+                  ? "self-end"
+                  : "self-start"
               }`}
             >
               <LinearGradient
                 colors={
                   msg.sender === "user"
                     ? ["#808CEA", "#6775E3"]
-                    : ["#76C1CE", "#5AB0BD"]
+                    : ["#FFFFFF", "#F8FAFC"]
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                className="px-5 py-4"
+                className={`px-5 py-4 overflow-hidden rounded-[26px] ${
+                  msg.sender === "user" ? "rounded-tr-sm" : "rounded-tl-sm border border-slate-200"
+                }`}
               >
                 {msg.audio_url ? (
                   <View>
                     <VoiceMessagePlayer audioUrl={msg.audio_url} sender={msg.sender} shouldAutoplay={msg.shouldAutoplay} />
                     {msg.text && msg.text !== "Voice Message" && (
                       <Text className={`text-[13px] leading-5 mt-2 pt-2 border-t font-semibold ${
-                        msg.sender === "user" ? "text-white/95 border-white/20" : "text-slate-800/80 border-black/10"
+                        msg.sender === "user" ? "text-white/95 border-white/20" : "text-slate-800/80 border-slate-200"
                       }`}>
                         {msg.text}
                       </Text>
@@ -1370,18 +1375,21 @@ export default function ChatScreen() {
                   </View>
                 ) : (
                   <View>
-                    <Text className="text-white text-[16px] leading-6 font-semibold tracking-wide">
+                    <Text className={`text-[16px] leading-6 font-semibold tracking-wide ${msg.sender === "user" ? "text-white" : "text-slate-800"}`}>
                       {msg.text}
                     </Text>
                     {msg.sender === "ai" && msg.text && (
                       <TouchableOpacity 
                         onPress={() => handlePlayTTS(msg.id, msg.text)} 
-                        className="bg-white/20 p-1.5 rounded-full shadow-sm self-end mt-2"
+                        disabled={loadingTTSMsgId === msg.id}
+                        className="bg-slate-100 p-2 rounded-full shadow-sm self-end mt-2"
                       >
-                        {playingMsgId === msg.id ? (
-                          <Pause size={14} color="white" />
+                        {loadingTTSMsgId === msg.id ? (
+                          <ActivityIndicator size="small" color="#808CEA" />
+                        ) : playingMsgId === msg.id ? (
+                          <Pause size={14} color="#475569" />
                         ) : (
-                          <Play size={14} color="white" className="ml-0.5" />
+                          <Play size={14} color="#475569" className="ml-0.5" />
                         )}
                       </TouchableOpacity>
                     )}

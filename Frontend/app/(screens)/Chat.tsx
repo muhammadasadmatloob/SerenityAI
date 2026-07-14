@@ -1408,7 +1408,7 @@ export default function ChatScreen() {
                         ) : playingMsgId === msg.id ? (
                           <Pause size={14} color="white" />
                         ) : (
-                          <Play size={14} color="white" className="ml-0.5" />
+                          <Play size={14} color="white" style={{ marginLeft: 2 }} />
                         )}
                       </TouchableOpacity>
                     )}

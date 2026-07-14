@@ -4,7 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { Eye, EyeOff } from "lucide-react-native";
 import React, { useState } from "react";
-import { Alert, Pressable, Text, TextInput, View, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, ScrollView, Platform } from "react-native";
+import { Alert, Pressable, Text, TextInput, View, ActivityIndicator, TouchableOpacity, KeyboardAvoidingView, ScrollView, Platform, Keyboard } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BACKEND_URL } from "../../constants/config";
 
@@ -20,6 +20,7 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
+    Keyboard.dismiss();
     if (!email || !password || (!isLogin && !confirmPassword)) {
       Alert.alert("Missing fields", "Please fill all fields");
       return;
@@ -119,7 +120,7 @@ export default function AuthScreen() {
         >
           <ScrollView
             contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingHorizontal: 40 }}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
             showsVerticalScrollIndicator={false}
           >
             <Text className="text-white text-4xl font-bold text-center mb-8 mt-10">Your Private Space{"\n"}For Healing</Text>

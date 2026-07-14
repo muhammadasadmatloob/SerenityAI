@@ -217,6 +217,7 @@ export default function FeelScreen() {
   };
 
   const handleContinue = async () => {
+    Keyboard.dismiss();
     if (!canProceed) return;
     
     // Verify network connectivity before attempting the initial session handshake
@@ -255,7 +256,7 @@ export default function FeelScreen() {
           <ScrollView
             contentContainerStyle={{ flexGrow: 1, justifyContent: "center", padding: 24 }}
             showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+            keyboardShouldPersistTaps="always"
           >
             <View 
             style={{

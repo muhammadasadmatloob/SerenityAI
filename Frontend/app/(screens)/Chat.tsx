@@ -1338,8 +1338,8 @@ export default function ChatScreen() {
       </View>
 
       <KeyboardAvoidingView 
-        style={{ flex: 1, marginBottom: isKeyboardVisible ? 10 : tabBarHeight }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1, marginBottom: isKeyboardVisible ? 0 : tabBarHeight }}
+        behavior={Platform.OS === "ios" ? "padding" : "padding"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         {/* MESSAGES AREA */}

@@ -248,7 +248,7 @@ export default function FeelScreen() {
     <View className="flex-1">
       <SafeAreaView className="flex-1">
         <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior="padding"
           className="flex-1"
         >
           <ScrollView

@@ -282,7 +282,12 @@ export default function FeelScreen() {
                 return (
                   <Pressable
                     key={item.id}
-                    onPress={() => !isStartingSession && setSelectedMood(item.id)}
+                    onPress={() => {
+                      if (!isStartingSession) {
+                        setSelectedMood(item.id);
+                        setDescription("");
+                      }
+                    }}
                     disabled={isStartingSession}
                     style={{ width: "29%", aspectRatio: 1 }}
                   >
@@ -335,11 +340,23 @@ export default function FeelScreen() {
                 placeholder="Or, express exactly what's on your mind..."
                 placeholderTextColor="#6B7280"
                 value={description}
-                onChangeText={setDescription}
+                onChangeText={(text) => {
+                  setDescription(text);
+                  if (text.length > 0) {
+                    setSelectedMood(null);
+                  }
+                }}
                 multiline
                 numberOfLines={2}
                 editable={!isStartingSession}
-                onFocus={() => setIsFocused(true)}
+                onFocus={() => {
+                  setIsFocused(true);
+                  if (description.length > 0) {
+                     setSelectedMood(null);
+                  } else {
+                     setSelectedMood(null);
+                  }
+                }}
                 onBlur={() => setIsFocused(false)}
                 style={{ maxHeight: 80 }}
               />

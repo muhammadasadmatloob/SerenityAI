@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ReusableButton from "../(components)/button";
@@ -284,6 +285,7 @@ export default function FeelScreen() {
                     key={item.id}
                     onPress={() => {
                       if (!isStartingSession) {
+                        Keyboard.dismiss();
                         setSelectedMood(item.id);
                         setDescription("");
                       }
@@ -351,11 +353,7 @@ export default function FeelScreen() {
                 editable={!isStartingSession}
                 onFocus={() => {
                   setIsFocused(true);
-                  if (description.length > 0) {
-                     setSelectedMood(null);
-                  } else {
-                     setSelectedMood(null);
-                  }
+                  setSelectedMood(null);
                 }}
                 onBlur={() => setIsFocused(false)}
                 style={{ maxHeight: 80 }}

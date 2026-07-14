@@ -177,9 +177,9 @@ const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sende
         }`}
       >
         {isPlaying ? (
-          <Pause size={18} color="white" />
+          <Pause size={18} color={sender === "user" ? "white" : "#475569"} />
         ) : (
-          <Play size={18} color="white" style={{ marginLeft: 2 }} />
+          <Play size={18} color={sender === "user" ? "white" : "#475569"} style={{ marginLeft: 2 }} />
         )}
       </TouchableOpacity>
 
@@ -1331,43 +1331,45 @@ export default function ChatScreen() {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingVertical: 20 }}
         >
-          {history.map((msg, idx) => (
+          {history.map((msg, idx) => {
+            const isUser = msg.sender === "user";
+            return (
             <MotiView
               key={msg.id}
-              from={{ opacity: 0, scale: 0.95, translateX: msg.sender === "user" ? 30 : -30, translateY: 10 }}
+              from={{ opacity: 0, scale: 0.85, translateX: isUser ? 30 : -30, translateY: 10 }}
               animate={{ opacity: 1, scale: 1, translateX: 0, translateY: 0 }}
-              transition={{ type: "spring", damping: 18, stiffness: 120 }}
+              transition={{ type: "spring", damping: 18, stiffness: 120, mass: 0.8 }}
               style={{
-                shadowColor: "#0F172A",
+                shadowColor: isUser ? "#6775E3" : "#5AB0BD",
                 shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: msg.sender === "user" ? 0.2 : 0.06,
-                shadowRadius: 16,
-                elevation: 3,
+                shadowOpacity: 0.18,
+                shadowRadius: 12,
+                elevation: 4,
+                overflow: 'visible'
               }}
-              className={`mb-4 max-w-[82%] ${
-                msg.sender === "user"
+              className={`mb-5 max-w-[82%] ${
+                isUser
                   ? "self-end"
                   : "self-start"
               }`}
             >
               <LinearGradient
                 colors={
-                  msg.sender === "user"
-                    ? ["#808CEA", "#6775E3"]
-                    : ["#FFFFFF", "#F8FAFC"]
+                  isUser
+                    ? ["#8B95EE", "#6775E3"]
+                    : ["#F8FAFC", "#F1F5F9"]
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                className={`px-5 py-4 overflow-hidden rounded-[26px] ${
-                  msg.sender === "user" ? "rounded-tr-sm" : "rounded-tl-sm border border-slate-200"
-                }`}
+                style={{ borderRadius: 28, borderTopRightRadius: isUser ? 8 : 28, borderTopLeftRadius: isUser ? 28 : 8 }}
+                className={`px-5 py-4 overflow-hidden border ${isUser ? 'border-white/20' : 'border-slate-200/60'}`}
               >
                 {msg.audio_url ? (
                   <View>
                     <VoiceMessagePlayer audioUrl={msg.audio_url} sender={msg.sender} shouldAutoplay={msg.shouldAutoplay} />
                     {msg.text && msg.text !== "Voice Message" && (
                       <Text className={`text-[13px] leading-5 mt-2 pt-2 border-t font-semibold ${
-                        msg.sender === "user" ? "text-white/95 border-white/20" : "text-slate-800/80 border-slate-200"
+                        isUser ? "text-white/95 border-white/20" : "text-slate-600/90 border-slate-300/40"
                       }`}>
                         {msg.text}
                       </Text>
@@ -1375,21 +1377,21 @@ export default function ChatScreen() {
                   </View>
                 ) : (
                   <View>
-                    <Text className={`text-[16px] leading-6 font-semibold tracking-wide ${msg.sender === "user" ? "text-white" : "text-slate-800"}`}>
+                    <Text className={`text-[16px] leading-6 font-semibold tracking-wide ${isUser ? 'text-white' : 'text-slate-800'}`}>
                       {msg.text}
                     </Text>
-                    {msg.sender === "ai" && msg.text && (
+                    {!isUser && msg.text && (
                       <TouchableOpacity 
                         onPress={() => handlePlayTTS(msg.id, msg.text)} 
+                        className={`p-2 rounded-full shadow-sm self-end mt-2 ${loadingTTSMsgId === msg.id ? 'bg-transparent' : 'bg-slate-200/60'}`}
                         disabled={loadingTTSMsgId === msg.id}
-                        className="bg-slate-100 p-2 rounded-full shadow-sm self-end mt-2"
                       >
                         {loadingTTSMsgId === msg.id ? (
-                          <ActivityIndicator size="small" color="#808CEA" />
+                          <ActivityIndicator size="small" color="#76C1CE" />
                         ) : playingMsgId === msg.id ? (
-                          <Pause size={14} color="#475569" />
+                          <Pause size={14} color="#76C1CE" />
                         ) : (
-                          <Play size={14} color="#475569" className="ml-0.5" />
+                          <Play size={14} color="#76C1CE" className="ml-0.5" />
                         )}
                       </TouchableOpacity>
                     )}
@@ -1397,41 +1399,50 @@ export default function ChatScreen() {
                 )}
               </LinearGradient>
             </MotiView>
-          ))}
+          )})}
           {loading && (
             <MotiView
-              from={{ opacity: 0, scale: 0.9, translateY: 15 }}
-              animate={{ opacity: 1, scale: 1, translateY: 0 }}
-              transition={{ type: "spring", damping: 15, stiffness: 100 }}
+              from={{ opacity: 0, scale: 0.85, translateX: -30, translateY: 10 }}
+              animate={{ opacity: 1, scale: 1, translateX: 0, translateY: 0 }}
+              transition={{ type: "spring", damping: 18, stiffness: 120, mass: 0.8 }}
               style={{
-                shadowColor: "#0F172A",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.06,
-                shadowRadius: 10,
-                elevation: 2,
+                shadowColor: "#5AB0BD",
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.18,
+                shadowRadius: 12,
+                elevation: 4,
+                overflow: 'visible'
               }}
-              className="px-5 py-4 rounded-[26px] mb-4 max-w-[82%] bg-[#76C1CE] self-start rounded-tl-none flex-row items-center gap-1.5"
+              className="mb-5 max-w-[82%] self-start"
             >
-              <View className="flex-row items-center gap-1.5 h-6">
-                <MotiView
-                  from={{ translateY: 0 }}
-                  animate={{ translateY: -6 }}
-                  transition={{ type: "timing", duration: 350, loop: true, repeatReverse: true }}
-                  className="w-2.5 h-2.5 rounded-full bg-white"
-                />
-                <MotiView
-                  from={{ translateY: 0 }}
-                  animate={{ translateY: -6 }}
-                  transition={{ type: "timing", duration: 350, delay: 120, loop: true, repeatReverse: true }}
-                  className="w-2.5 h-2.5 rounded-full bg-white"
-                />
-                <MotiView
-                  from={{ translateY: 0 }}
-                  animate={{ translateY: -6 }}
-                  transition={{ type: "timing", duration: 350, delay: 240, loop: true, repeatReverse: true }}
-                  className="w-2.5 h-2.5 rounded-full bg-white"
-                />
-              </View>
+              <LinearGradient
+                colors={["#F8FAFC", "#F1F5F9"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ borderRadius: 28, borderTopRightRadius: 28, borderTopLeftRadius: 8 }}
+                className="px-5 py-4 overflow-hidden border border-slate-200/60 flex-row items-center"
+              >
+                <View className="flex-row items-center gap-2 h-6 px-1">
+                  <MotiView
+                    from={{ translateY: 2, scale: 0.8, opacity: 0.4 }}
+                    animate={{ translateY: -4, scale: 1.1, opacity: 1 }}
+                    transition={{ type: "timing", duration: 400, loop: true, repeatReverse: true }}
+                    className="w-2.5 h-2.5 rounded-full bg-[#76C1CE]"
+                  />
+                  <MotiView
+                    from={{ translateY: 2, scale: 0.8, opacity: 0.4 }}
+                    animate={{ translateY: -4, scale: 1.1, opacity: 1 }}
+                    transition={{ type: "timing", duration: 400, delay: 150, loop: true, repeatReverse: true }}
+                    className="w-2.5 h-2.5 rounded-full bg-[#76C1CE]"
+                  />
+                  <MotiView
+                    from={{ translateY: 2, scale: 0.8, opacity: 0.4 }}
+                    animate={{ translateY: -4, scale: 1.1, opacity: 1 }}
+                    transition={{ type: "timing", duration: 400, delay: 300, loop: true, repeatReverse: true }}
+                    className="w-2.5 h-2.5 rounded-full bg-[#76C1CE]"
+                  />
+                </View>
+              </LinearGradient>
             </MotiView>
           )}
         </ScrollView>

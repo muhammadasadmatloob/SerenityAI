@@ -345,7 +345,6 @@ export default function ChatScreen() {
   const [callSound, setCallSound] = useState<Audio.Sound | null>(null);
   const [callDuration, setCallDuration] = useState(0);
   const [displayedAiSpeechText, setDisplayedAiSpeechText] = useState("");
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   // Voice Message Recording States
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);

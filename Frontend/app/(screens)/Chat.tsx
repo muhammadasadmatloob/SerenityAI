@@ -177,9 +177,9 @@ const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({ audioUrl, sende
         }`}
       >
         {isPlaying ? (
-          <Pause size={18} color={sender === "user" ? "white" : "#475569"} />
+          <Pause size={18} color="white" />
         ) : (
-          <Play size={18} color={sender === "user" ? "white" : "#475569"} style={{ marginLeft: 2 }} />
+          <Play size={18} color="white" style={{ marginLeft: 2 }} />
         )}
       </TouchableOpacity>
 
@@ -1305,15 +1305,34 @@ export default function ChatScreen() {
   return (
     <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
       {/* HEADER */}
-      <View className="flex-row items-center justify-between px-6 py-4 border-b border-gray-100 bg-transparent">
-        {/* Back button removed */}
-        <Text className="text-xl font-bold text-gray-800">DONNA AI</Text>
-        <View className="flex-row items-center gap-5">
-          <TouchableOpacity onPress={startCall} disabled={sessionFinished}>
-            <Phone size={22} color={sessionFinished ? "#D1D5DB" : "#55C5CC"} />
+      <View 
+        className="flex-row items-center justify-between px-6 py-4 bg-white/90 rounded-b-[32px] z-10 mx-2 mt-2" 
+        style={{ 
+          elevation: 4, 
+          shadowColor: "#76C1CE", 
+          shadowOpacity: 0.15, 
+          shadowOffset: { width: 0, height: 6 }, 
+          shadowRadius: 12 
+        }}
+      >
+        <View className="flex-row items-center gap-3">
+          <View className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#76C1CE] to-[#5AB0BD] items-center justify-center shadow-sm" style={{ backgroundColor: "#76C1CE" }}>
+            <Text className="text-white text-lg font-bold tracking-wider">D</Text>
+          </View>
+          <View>
+            <Text className="text-lg font-extrabold text-slate-800 tracking-wide">Donna AI</Text>
+            <View className="flex-row items-center gap-1.5 mt-0.5">
+              <View className="w-2 h-2 rounded-full bg-emerald-400" />
+              <Text className="text-xs font-semibold text-emerald-500">Therapist</Text>
+            </View>
+          </View>
+        </View>
+        <View className="flex-row items-center gap-3">
+          <TouchableOpacity onPress={startCall} disabled={sessionFinished} className="w-10 h-10 rounded-full bg-slate-50 items-center justify-center shadow-sm border border-slate-100">
+            <Phone size={18} color={sessionFinished ? "#D1D5DB" : "#55C5CC"} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={endSession}>
-            <LogOut size={22} color="#EF4444" />
+          <TouchableOpacity onPress={endSession} className="w-10 h-10 rounded-full bg-red-50 items-center justify-center shadow-sm border border-red-100">
+            <LogOut size={18} color="#EF4444" style={{ marginLeft: 2 }} />
           </TouchableOpacity>
         </View>
       </View>
@@ -1357,41 +1376,39 @@ export default function ChatScreen() {
                 colors={
                   isUser
                     ? ["#8B95EE", "#6775E3"]
-                    : ["#F8FAFC", "#F1F5F9"]
+                    : ["#76C1CE", "#5AB0BD"]
                 }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{ borderRadius: 28, borderTopRightRadius: isUser ? 8 : 28, borderTopLeftRadius: isUser ? 28 : 8 }}
-                className={`px-5 py-4 overflow-hidden border ${isUser ? 'border-white/20' : 'border-slate-200/60'}`}
+                className={`px-5 py-4 overflow-hidden border ${isUser ? 'border-white/20' : 'border-white/20'}`}
               >
                 {msg.audio_url ? (
                   <View>
                     <VoiceMessagePlayer audioUrl={msg.audio_url} sender={msg.sender} shouldAutoplay={msg.shouldAutoplay} />
                     {msg.text && msg.text !== "Voice Message" && (
-                      <Text className={`text-[13px] leading-5 mt-2 pt-2 border-t font-semibold ${
-                        isUser ? "text-white/95 border-white/20" : "text-slate-600/90 border-slate-300/40"
-                      }`}>
+                      <Text className={`text-[13px] leading-5 mt-2 pt-2 border-t font-semibold text-white/95 border-white/20`}>
                         {msg.text}
                       </Text>
                     )}
                   </View>
                 ) : (
                   <View>
-                    <Text className={`text-[16px] leading-6 font-semibold tracking-wide ${isUser ? 'text-white' : 'text-slate-800'}`}>
+                    <Text className={`text-[16px] leading-6 font-semibold tracking-wide text-white`}>
                       {msg.text}
                     </Text>
                     {!isUser && msg.text && (
                       <TouchableOpacity 
                         onPress={() => handlePlayTTS(msg.id, msg.text)} 
-                        className={`p-2 rounded-full shadow-sm self-end mt-2 ${loadingTTSMsgId === msg.id ? 'bg-transparent' : 'bg-slate-200/60'}`}
+                        className={`p-2 rounded-full shadow-sm self-end mt-2 ${loadingTTSMsgId === msg.id ? 'bg-transparent' : 'bg-white/20'}`}
                         disabled={loadingTTSMsgId === msg.id}
                       >
                         {loadingTTSMsgId === msg.id ? (
-                          <ActivityIndicator size="small" color="#76C1CE" />
+                          <ActivityIndicator size="small" color="white" />
                         ) : playingMsgId === msg.id ? (
-                          <Pause size={14} color="#76C1CE" />
+                          <Pause size={14} color="white" />
                         ) : (
-                          <Play size={14} color="#76C1CE" className="ml-0.5" />
+                          <Play size={14} color="white" className="ml-0.5" />
                         )}
                       </TouchableOpacity>
                     )}
@@ -1416,30 +1433,30 @@ export default function ChatScreen() {
               className="mb-5 max-w-[82%] self-start"
             >
               <LinearGradient
-                colors={["#F8FAFC", "#F1F5F9"]}
+                colors={["#76C1CE", "#5AB0BD"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{ borderRadius: 28, borderTopRightRadius: 28, borderTopLeftRadius: 8 }}
-                className="px-5 py-4 overflow-hidden border border-slate-200/60 flex-row items-center"
+                className="px-5 py-4 overflow-hidden border border-white/20 flex-row items-center"
               >
                 <View className="flex-row items-center gap-2 h-6 px-1">
                   <MotiView
-                    from={{ translateY: 2, scale: 0.8, opacity: 0.4 }}
+                    from={{ translateY: 2, scale: 0.8, opacity: 0.6 }}
                     animate={{ translateY: -4, scale: 1.1, opacity: 1 }}
                     transition={{ type: "timing", duration: 400, loop: true, repeatReverse: true }}
-                    className="w-2.5 h-2.5 rounded-full bg-[#76C1CE]"
+                    className="w-2 h-2 rounded-full bg-white"
                   />
                   <MotiView
-                    from={{ translateY: 2, scale: 0.8, opacity: 0.4 }}
+                    from={{ translateY: 2, scale: 0.8, opacity: 0.6 }}
                     animate={{ translateY: -4, scale: 1.1, opacity: 1 }}
                     transition={{ type: "timing", duration: 400, delay: 150, loop: true, repeatReverse: true }}
-                    className="w-2.5 h-2.5 rounded-full bg-[#76C1CE]"
+                    className="w-2 h-2 rounded-full bg-white"
                   />
                   <MotiView
-                    from={{ translateY: 2, scale: 0.8, opacity: 0.4 }}
+                    from={{ translateY: 2, scale: 0.8, opacity: 0.6 }}
                     animate={{ translateY: -4, scale: 1.1, opacity: 1 }}
                     transition={{ type: "timing", duration: 400, delay: 300, loop: true, repeatReverse: true }}
-                    className="w-2.5 h-2.5 rounded-full bg-[#76C1CE]"
+                    className="w-2 h-2 rounded-full bg-white"
                   />
                 </View>
               </LinearGradient>
@@ -1495,17 +1512,26 @@ export default function ChatScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View className="flex-row items-center flex-1 bg-gray-100 rounded-[24px] px-5 relative justify-between">
+              <View 
+                className="flex-row items-center flex-1 bg-white rounded-[28px] px-5 relative justify-between border border-slate-100"
+                style={{
+                  elevation: 3,
+                  shadowColor: "#000",
+                  shadowOpacity: 0.05,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowRadius: 5
+                }}
+              >
                 <TextInput
                   ref={inputRef}
                   placeholder={sessionFinished ? "See you tomorrow in next session." : "Talk to Donna..."}
                   value={message}
                   onChangeText={setMessage}
-                  className="flex-1 text-black text-[16px] pr-8"
+                  className="flex-1 text-slate-800 text-[16px] pr-8"
                   multiline={true}
-                  style={{ maxHeight: 100, minHeight: 40, paddingTop: 10, paddingBottom: 10 }}
+                  style={{ maxHeight: 100, minHeight: 46, paddingTop: 12, paddingBottom: 12 }}
                   textAlignVertical="center"
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#94A3B8"
                   editable={!sessionFinished}
                 />
                 
@@ -1513,9 +1539,9 @@ export default function ChatScreen() {
                 {!message.trim() && !sessionFinished && (
                   <TouchableOpacity 
                     onPress={handleStartVoiceRecording}
-                    className="absolute right-3 p-1.5"
+                    className="absolute right-3 p-2 bg-slate-50 rounded-full"
                   >
-                    <Mic size={20} color="#55C5CC" />
+                    <Mic size={18} color="#76C1CE" />
                   </TouchableOpacity>
                 )}
               </View>
@@ -1525,11 +1551,11 @@ export default function ChatScreen() {
             <TouchableOpacity
               onPress={isVoiceRecording ? handleSendVoiceRecording : handleSend}
               disabled={loading || (!message.trim() && !isVoiceRecording) || sessionFinished}
-              className={`p-4 rounded-full ml-3 shadow-lg ${
-                (loading || (!message.trim() && !isVoiceRecording) || sessionFinished) ? 'bg-gray-300' : 'bg-black'
+              className={`w-[46px] h-[46px] rounded-full ml-3 items-center justify-center shadow-sm ${
+                (loading || (!message.trim() && !isVoiceRecording) || sessionFinished) ? 'bg-slate-200' : 'bg-[#76C1CE]'
               }`}
             >
-              <Send size={18} color="white" />
+              <Send size={18} color="white" style={{ marginLeft: -2, marginTop: 1 }} />
             </TouchableOpacity>
           </View>
         </View>

@@ -249,7 +249,21 @@ export default function ChatScreen() {
   const [playingMsgId, setPlayingMsgId] = useState<string | number | null>(null);
   const [loadingTTSMsgId, setLoadingTTSMsgId] = useState<string | number | null>(null);
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   
+  useEffect(() => {
+    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => {
+      setKeyboardVisible(true);
+    });
+    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
+      setKeyboardVisible(false);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const insets = useSafeAreaInsets();
   const tabBarHeight = 70 + Math.max(insets.bottom, 0);
 
@@ -1338,9 +1352,9 @@ export default function ChatScreen() {
       </View>
 
       <KeyboardAvoidingView 
-        style={{ flex: 1, marginBottom: tabBarHeight }}
-        behavior={Platform.OS === "ios" ? "padding" : "padding"}
-        keyboardVerticalOffset={tabBarHeight}
+        style={{ flex: 1, marginBottom: isKeyboardVisible ? 10 : tabBarHeight }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
         {/* MESSAGES AREA */}
         <ScrollView

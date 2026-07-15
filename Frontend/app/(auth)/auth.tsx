@@ -180,6 +180,12 @@ export default function AuthScreen() {
             <TouchableOpacity onPress={handleSubmit} disabled={loading} className="bg-white py-4 rounded-xl items-center mt-2">
               {loading ? <ActivityIndicator color="#808CEA" /> : <Text className="font-bold text-lg text-black">{isLogin ? "Login" : "Create Account"}</Text>}
             </TouchableOpacity>
+            
+            {isLogin && (
+              <Pressable onPress={() => router.push("/(auth)/ForgotPassword")} className="mt-4">
+                <Text className="text-white text-center font-medium opacity-90">Forgot Password?</Text>
+              </Pressable>
+            )}
             <Pressable onPress={() => router.setParams({ mode: isLogin ? "signup" : "login" })} className="mt-10 pb-10">
               <Text className="text-white text-center">{isLogin ? "Don't have an account? Sign up" : "Already have an account? Log in"}</Text>
             </Pressable>

@@ -191,22 +191,19 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
     if not runpod_api_key or not runpod_endpoint_id:
         raise Exception("RunPod credentials missing in environment variables.")
         
-    combined_prompt = f"System Instruction:\n{system_instruction}\n\nUser Message:\n{prompt}"
-    url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/runsync"
+    url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/openai/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {runpod_api_key}",
         "Content-Type": "application/json"
     }
     payload = {
-        "input": {
-            "prompt": combined_prompt,
-            "messages": [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt}
-            ],
-            "max_tokens": max_tokens,
-            "temperature": temperature
-        }
+        "model": "gpt-3.5-turbo", # Dummy model name for vLLM compatibility
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": prompt}
+        ],
+        "max_tokens": max_tokens,
+        "temperature": temperature
     }
     
     try:
@@ -214,14 +211,11 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
             rp_response = await client.post(url, json=payload, headers=headers)
             if rp_response.status_code == 200:
                 rp_data = rp_response.json()
-                status = rp_data.get("status")
-                if status == "COMPLETED":
-                    output_text = str(rp_data.get("output", ""))
-                    if isinstance(rp_data.get("output"), dict) and "choices" in rp_data["output"]:
-                        output_text = str(rp_data["output"]["choices"][0]["message"]["content"])
+                if "choices" in rp_data and len(rp_data["choices"]) > 0:
+                    output_text = str(rp_data["choices"][0]["message"]["content"])
                     return MockCompletion(output_text)
                 else:
-                    raise Exception(f"RunPod failed or is still in queue (status: {status}).")
+                    raise Exception(f"RunPod empty or malformed OpenAI response: {rp_data}")
             else:
                 raise Exception(f"RunPod request failed: {rp_response.status_code} {rp_response.text}")
     except Exception as e:
@@ -1007,24 +1001,24 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
                 f"Provide a brief thought process on what Donna should say next, emphasizing the {path} path."
             )
             
-            url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/runsync"
+            url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/openai/v1/chat/completions"
             headers = {
                 "Authorization": f"Bearer {runpod_api_key}",
                 "Content-Type": "application/json"
             }
             payload = {
-                "input": {
-                    "prompt": thinker_prompt,
-                    "messages": [{"role": "user", "content": thinker_prompt}]
-                }
+                "model": "gpt-3.5-turbo",
+                "messages": [{"role": "user", "content": thinker_prompt}],
+                "max_tokens": 1000,
+                "temperature": 0.6
             }
             
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 rp_response = await client.post(url, json=payload, headers=headers)
                 if rp_response.status_code == 200:
                     rp_data = rp_response.json()
-                    if "output" in rp_data:
-                        runpod_analysis = str(rp_data["output"])
+                    if "choices" in rp_data and len(rp_data["choices"]) > 0:
+                        runpod_analysis = str(rp_data["choices"][0]["message"]["content"])
                     logger.info("RunPod Thinker Analysis completed successfully.")
                 else:
                     logger.warning(f"RunPod request failed with status {rp_response.status_code}: {rp_response.text}")

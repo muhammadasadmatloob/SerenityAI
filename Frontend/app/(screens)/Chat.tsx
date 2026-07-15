@@ -754,6 +754,10 @@ export default function ChatScreen() {
         Alert.alert("Permission Required", "Donna needs microphone access to hear your beautiful voice.");
         return;
       }
+      
+      // Always default to speaker OFF (private earpiece mode) for a new call
+      setIsSpeakerOn(false);
+      isSpeakerOnRef.current = false;
 
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
@@ -1111,6 +1115,10 @@ export default function ChatScreen() {
     setCallStatus("ended");
     updateConfirmationState(false);
     accumulatedTranscriptRef.current = "";
+    
+    // Reset speaker state so next call defaults to private
+    setIsSpeakerOn(false);
+    isSpeakerOnRef.current = false;
     
     if (typingIntervalRef.current) {
       clearInterval(typingIntervalRef.current);

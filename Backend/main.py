@@ -205,6 +205,10 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
         "max_tokens": max_tokens,
         "temperature": temperature
     }
+
+    if response_format:
+        payload["response_format"] = response_format
+
     
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:

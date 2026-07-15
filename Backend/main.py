@@ -40,8 +40,6 @@ from database import (
 )
 from voice_analyzer import analyze_voice_emotion
 from semantic_memory import add_semantic_memory, retrieve_semantic_memories
-import google.generativeai as genai
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 load_dotenv()
 
@@ -51,11 +49,6 @@ logger = logging.getLogger("donna_ai")
 
 # --- CONFIG ---
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    GEMINI_API_KEY = GEMINI_API_KEY.strip('"').strip("'")
-    genai.configure(api_key=GEMINI_API_KEY)
-
 
 SESSION_TIMEOUT_SECONDS = 1200
 global_ai_executor = concurrent.futures.ThreadPoolExecutor(max_workers=20)
@@ -136,8 +129,7 @@ def initialize_services():
     
     # 1. Validate environment variables
     required_vars = {
-        "FIREBASE_JSON_CONTENT": os.getenv("FIREBASE_JSON_CONTENT"),
-        "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
+        "RUNPOD_API_KEY": os.getenv("RUNPOD_API_KEY"),
     }
     
     missing_vars = [name for name, val in required_vars.items() if not val or not val.strip()]
@@ -167,7 +159,7 @@ def initialize_services():
     finally:
         db.close()
 
-    # 3. Verify Gemini API Connectivity
+    # 3. Verify RunPod API Connectivity
     try:
         if not os.getenv("RUNPOD_API_KEY"):
             logger.critical("❌ CRITICAL: RUNPOD_API_KEY missing in .env")
@@ -178,47 +170,6 @@ def initialize_services():
         raise SystemExit(1)
 
     logger.info("🚀 All critical services validated successfully. Starting application server...")
-
-async def safe_gemini_completion(prompt: str, system_instruction: str, max_tokens: int = 4000, temperature: float = 0.3, response_format=None):
-    # Store the prompt in context for debugging on error
-    llm_payload_context.set([{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}])
-    
-    generation_config_args = {
-        "temperature": temperature,
-        "max_output_tokens": max_tokens,
-    }
-    if response_format and response_format.get("type") == "json_object":
-        generation_config_args["response_mime_type"] = "application/json"
-        
-    safety_settings = {
-        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-    }
-        
-    model = genai.GenerativeModel(
-        model_name="gemini-3.1-flash-lite",
-        system_instruction=system_instruction,
-        generation_config=genai.types.GenerationConfig(**generation_config_args),
-        safety_settings=safety_settings
-    )
-    
-    try:
-        res = await model.generate_content_async(prompt)
-        # Create a mock completion object to satisfy any legacy callers
-        class MockChoiceMessage:
-            def __init__(self, content): self.content = content
-        class MockChoice:
-            def __init__(self, content): self.message = MockChoiceMessage(content)
-        class MockCompletion:
-            def __init__(self, content): self.choices = [MockChoice(content)]
-        
-        return MockCompletion(res.text)
-    except Exception as e:
-        logger.error(f"Gemini Engine failed or timed out: {e}")
-        logger.error(f"Gemini API Error: {str(e)}")
-        raise e
 
 async def safe_runpod_completion(prompt: str, system_instruction: str, max_tokens: int = 4000, temperature: float = 0.3, response_format=None):
     # Store the prompt in context for debugging on error
@@ -234,93 +185,47 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
     class MockCompletion:
         def __init__(self, content): self.choices = [MockChoice(content)]
 
-    # --- 1. TRY RUNPOD FIRST ---
     runpod_api_key = os.getenv("RUNPOD_API_KEY")
     runpod_endpoint_id = os.getenv("RUNPOD_ENDPOINT_ID")
     
-    if runpod_api_key and runpod_endpoint_id:
-        combined_prompt = f"System Instruction:\n{system_instruction}\n\nUser Message:\n{prompt}"
-        url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/runsync"
-        headers = {
-            "Authorization": f"Bearer {runpod_api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "input": {
-                "prompt": combined_prompt,
-                "messages": [
-                    {"role": "system", "content": system_instruction},
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": max_tokens,
-                "temperature": temperature
-            }
-        }
+    if not runpod_api_key or not runpod_endpoint_id:
+        raise Exception("RunPod credentials missing in environment variables.")
         
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                rp_response = await client.post(url, json=payload, headers=headers)
-                if rp_response.status_code == 200:
-                    rp_data = rp_response.json()
-                    status = rp_data.get("status")
-                    if status == "COMPLETED":
-                        output_text = str(rp_data.get("output", ""))
-                        if isinstance(rp_data.get("output"), dict) and "choices" in rp_data["output"]:
-                            output_text = str(rp_data["output"]["choices"][0]["message"]["content"])
-                        return MockCompletion(output_text)
-                    else:
-                        logger.warning(f"RunPod failed or is still in queue (status: {status}). Falling back to Gemini.")
-                else:
-                    logger.warning(f"RunPod request failed: {rp_response.status_code}. Falling back to Gemini.")
-        except Exception as e:
-            logger.warning(f"RunPod Engine failed: {e}. Falling back to Gemini.")
-    else:
-        logger.warning("RunPod credentials missing. Falling back to Gemini.")
-
-    # --- 2. FALLBACK TO GEMINI ---
-    gemini_api_key = os.getenv("GEMINI_API_KEY")
-    if not gemini_api_key:
-        raise Exception("RunPod failed and GEMINI_API_KEY is not set for fallback")
-    gemini_api_key = gemini_api_key.strip('"').strip("'")
-
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={gemini_api_key}"
-    gemini_payload = {
-        "systemInstruction": {
-            "parts": {"text": system_instruction}
-        },
-        "contents": [
-            {"role": "user", "parts": [{"text": prompt}]}
-        ],
-        "generationConfig": {
-            "temperature": temperature,
-            "maxOutputTokens": max_tokens
-        },
-        "safetySettings": [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-        ]
+    combined_prompt = f"System Instruction:\n{system_instruction}\n\nUser Message:\n{prompt}"
+    url = f"https://api.runpod.ai/v2/{runpod_endpoint_id}/runsync"
+    headers = {
+        "Authorization": f"Bearer {runpod_api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "input": {
+            "prompt": combined_prompt,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": max_tokens,
+            "temperature": temperature
+        }
     }
     
-    if response_format and response_format.get("type") == "json_object":
-        gemini_payload["generationConfig"]["responseMimeType"] = "application/json"
-
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            gemini_response = await client.post(gemini_url, json=gemini_payload)
-            if gemini_response.status_code == 200:
-                gemini_data = gemini_response.json()
-                try:
-                    output_text = gemini_data["candidates"][0]["content"]["parts"][0]["text"]
+            rp_response = await client.post(url, json=payload, headers=headers)
+            if rp_response.status_code == 200:
+                rp_data = rp_response.json()
+                status = rp_data.get("status")
+                if status == "COMPLETED":
+                    output_text = str(rp_data.get("output", ""))
+                    if isinstance(rp_data.get("output"), dict) and "choices" in rp_data["output"]:
+                        output_text = str(rp_data["output"]["choices"][0]["message"]["content"])
                     return MockCompletion(output_text)
-                except (KeyError, IndexError) as e:
-                    logger.error(f"Failed to parse Gemini response: {gemini_data}")
-                    raise Exception("Invalid response format from Gemini")
+                else:
+                    raise Exception(f"RunPod failed or is still in queue (status: {status}).")
             else:
-                raise Exception(f"Gemini fallback request failed: {gemini_response.status_code} {gemini_response.text}")
+                raise Exception(f"RunPod request failed: {rp_response.status_code} {rp_response.text}")
     except Exception as e:
-        logger.error(f"Gemini fallback completely failed: {e}")
+        logger.error(f"RunPod Engine failed: {e}")
         raise e
 if not firebase_admin._apps:
     firebase_json = os.getenv("FIREBASE_JSON_CONTENT")
@@ -1124,10 +1029,10 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
                 else:
                     logger.warning(f"RunPod request failed with status {rp_response.status_code}: {rp_response.text}")
         except Exception as e:
-            logger.error(f"RunPod Thinker engine failed: {e}. Falling back to Gemini-only mode.")
+            logger.error(f"RunPod Thinker engine failed: {e}.")
             
     # -----------------------------------------------------
-    # STEP 2: SPEAKER (Gemini)
+    # STEP 2: SPEAKER (RunPod)
     # -----------------------------------------------------
     if runpod_analysis:
         system_instruction += (
@@ -1138,7 +1043,7 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
         )
         
     try:
-        completion = await safe_gemini_completion(
+        completion = await safe_runpod_completion(
             prompt=chat_history,
             system_instruction=system_instruction,
             max_tokens=4000,
@@ -1162,7 +1067,7 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
             
         return completion
     except Exception as e:
-        logger.error(f"Gemini AI failed: {e}")
+        logger.error(f"RunPod Speaker AI failed: {e}")
         class MockChoiceMessage:
             def __init__(self, content): self.content = content
         class MockChoice:
@@ -1745,7 +1650,7 @@ def run_background_pipeline(session_id: int, user_uid: str, user_msg_id: int, pa
         db_check = SessionLocal()
         try:
             turn_count = db_check.query(Message).filter_by(session_id=session_id, role="user").count()
-            # Only run the heavy LLM summary every 3 turns to strictly stay under 5 RPM Gemini limits
+            # Only run the heavy LLM summary every 3 turns to strictly stay under rate limits
             if turn_count % 3 == 0:
                 import asyncio
                 asyncio.run(update_session_summary_task(session_id, user_uid))
@@ -1800,7 +1705,7 @@ async def update_session_summary_task(session_id: int, uid: str):
                 except Exception:
                     pass
                     
-        # Generate the updated summary from Gemini
+        # Generate the updated summary from RunPod
         prompt = get_summary_generation_prompt(conversation_history, past_summary_text)
         res = await safe_runpod_completion(
             prompt=prompt,
@@ -2567,7 +2472,7 @@ async def chat_voice(
         }
 
     except Exception as e:
-        logger.error(f"Voice chat Gemini/RunPod completion failed: {e}")
+        logger.error(f"Voice chat RunPod completion failed: {e}")
         ai_reply = "I'm listening, but my connection is a bit slow. Please go on."
         return {
             "user_message": {
@@ -2610,7 +2515,7 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
             "I need to vent about my day."
         ]
 
-    # Format the context and query Gemini/RunPod to generate 3 short suggestions
+    # Format the context and query RunPod to generate 3 short suggestions
     conversation_str = ""
     for msg in context:
         speaker = "Donna" if msg["role"] == "assistant" else "User"

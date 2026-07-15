@@ -22,13 +22,13 @@ export default function AuthScreen() {
   const handleSubmit = async () => {
     Keyboard.dismiss();
     if (!email || !password || (!isLogin && !confirmPassword)) {
-      Alert.alert("Missing fields", "Please fill all fields");
+      Alert.alert("Gentle Reminder", "Please fill in all the details so we can continue.");
       return;
     }
 
     if (!isLogin) {
       if (password !== confirmPassword) {
-        Alert.alert("Mismatch", "Passwords do not match");
+        Alert.alert("Almost There", "It looks like your passwords don't quite match. Let's try typing them again.");
         return;
       }
       
@@ -41,34 +41,34 @@ export default function AuthScreen() {
         });
         const valData = await valRes.json();
         if (!valRes.ok || !valData.success) {
-          Alert.alert("Weak Password", valData.message || "Password does not meet complexity requirements.");
+          Alert.alert("For Your Privacy", valData.message || "Please choose a slightly stronger password to keep your space secure.");
           setLoading(false);
           return;
         }
       } catch (err: any) {
         console.log("Password validation request failed, falling back to local checks:", err);
         if (password.length < 8) {
-          Alert.alert("Weak Password", "Password must be at least 8 characters long.");
+          Alert.alert("Gentle Reminder", "To keep your space secure, please make your password at least 8 characters long.");
           setLoading(false);
           return;
         }
         if (!/[A-Z]/.test(password)) {
-          Alert.alert("Weak Password", "Password must contain at least one uppercase letter (A-Z).");
+          Alert.alert("Gentle Reminder", "Please include at least one uppercase letter to strengthen your password.");
           setLoading(false);
           return;
         }
         if (!/[a-z]/.test(password)) {
-          Alert.alert("Weak Password", "Password must contain at least one lowercase letter (a-z).");
+          Alert.alert("Gentle Reminder", "Please include at least one lowercase letter to strengthen your password.");
           setLoading(false);
           return;
         }
         if (!/\d/.test(password)) {
-          Alert.alert("Weak Password", "Password must contain at least one number (0-9).");
+          Alert.alert("Gentle Reminder", "Please add at least one number to help protect your account.");
           setLoading(false);
           return;
         }
         if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-          Alert.alert("Weak Password", "Password must contain at least one special character (e.g., !, @, #, $, %, &, *).");
+          Alert.alert("Gentle Reminder", "Please add a special character (like ! or @) to make your password even more secure.");
           setLoading(false);
           return;
         }
@@ -85,7 +85,7 @@ export default function AuthScreen() {
         if (!user.emailVerified) {
           try {
             await sendEmailVerification(user);
-            Alert.alert("Verification Sent", "Your email is not verified. A new verification link has been sent to your inbox.");
+            Alert.alert("Welcome to Serenity", "Your email isn't verified yet. We've sent a gentle reminder to your inbox with a verification link.");
           } catch (resendErr) {
             console.log("Auto-resend verification failed:", resendErr);
           }
@@ -101,9 +101,31 @@ export default function AuthScreen() {
         router.replace("/(screens)/EmailVerify");
         return;
       }
-      const friendlyError = err.code?.split("/")[1]?.replace(/-/g, " ") || err.message;
-      const fullDetails = JSON.stringify(err, Object.getOwnPropertyNames(err));
-      Alert.alert("Entry Denied (v2)", `${friendlyError.toUpperCase()}\n\nDetails: ${fullDetails}`);
+      
+      let errorTitle = "Oops!";
+      let errorMessage = "Something went a little wrong. Let's take a pause and try again in a moment.";
+
+      if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password" || err.code === "auth/user-not-found") {
+        errorTitle = "Let's try that again";
+        errorMessage = "Hmm, those details don't seem quite right. Take a breath and double-check your email and password.";
+      } else if (err.code === "auth/invalid-email") {
+        errorTitle = "Quick Check";
+        errorMessage = "It looks like the email address isn't quite formatted correctly. Mind taking a second look?";
+      } else if (err.code === "auth/email-already-in-use") {
+        errorTitle = "Welcome Back";
+        errorMessage = "It looks like an account already exists with this email. Please try logging in instead.";
+      } else if (err.code === "auth/weak-password") {
+        errorTitle = "For Your Privacy";
+        errorMessage = "Please choose a slightly stronger password to keep your Serenity space secure.";
+      } else if (err.code === "auth/network-request-failed") {
+        errorTitle = "Connection Interrupted";
+        errorMessage = "We're having trouble connecting right now. Take a moment and try again when your connection returns.";
+      } else if (err.code === "auth/too-many-requests") {
+        errorTitle = "Take a Pause";
+        errorMessage = "There have been a few too many attempts. Please wait a moment before trying again.";
+      }
+
+      Alert.alert(errorTitle, errorMessage);
     } finally {
       setLoading(false);
     }

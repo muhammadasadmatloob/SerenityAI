@@ -23,7 +23,7 @@ export default function PathScreen() {
   const handleContinue = async () => {
     if (!selectedPath) return;
     const user = auth.currentUser;
-    if (!user) return Alert.alert("Error", "Login expired.");
+    if (!user) return Alert.alert("Session Paused", "It looks like your login expired. Let's sign in again.");
 
     setLoading(true);
     try {
@@ -40,7 +40,7 @@ export default function PathScreen() {
         params: { mood: mood, description: desc, path: selectedPath }
       });
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Something went wrong. Please try again.");
+      Alert.alert("Oops", "Something went a little wrong saving your choice. Please try again.");
     } finally {
       setLoading(false);
     }

@@ -51,7 +51,7 @@ export default function InfoScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Required", "To provide the best support, we need your location permission.");
+        Alert.alert("Permission Required", "To provide the best support, we kindly ask for your location permission.");
         return;
       }
       
@@ -89,7 +89,7 @@ export default function InfoScreen() {
       }
     } catch (err) {
       console.log(err);
-      Alert.alert("Location Error", "We couldn't retrieve your location. Make sure GPS is enabled.");
+      Alert.alert("Location Interrupted", "We couldn't quite retrieve your location. Please make sure GPS is enabled and try again.");
     } finally {
       setLocating(false);
     }
@@ -131,19 +131,19 @@ export default function InfoScreen() {
 
   const handleContinue = async () => {
     if (!name || !gender || !eName || !ePhone || !location) {
-      Alert.alert("Almost there!", "All fields are required. Please enter your name, date of birth, gender, sync location, and emergency contact details.");
+      Alert.alert("Almost there!", "We need just a little more info. Please fill in your name, date of birth, gender, location, and emergency contact.");
       return;
     }
 
     const phoneRegex = /^\+\d{1,4}\d{10}$/;
     if (!phoneRegex.test(ePhone)) {
-      Alert.alert("Invalid Phone Number", "Phone number must start with + followed by the country code and exactly 10 digits (e.g., +923331234567).");
+      Alert.alert("Gentle Reminder", "Please enter your phone number starting with '+' followed by your country code and digits.");
       return;
     }
     
     const user = auth.currentUser;
     if (!user) {
-      Alert.alert("Session Error", "Please log in again.");
+      Alert.alert("Session Paused", "It looks like your session expired. Let's log in again.");
       return;
     }
 
@@ -186,7 +186,7 @@ export default function InfoScreen() {
         console.log("Backend sync failed (non-blocking):", backendErr);
       }
     } catch (err: any) {
-      Alert.alert("Save Error", err.message || "We couldn't save your profile. Please try again.");
+      Alert.alert("Oops", "We couldn't quite save your profile this time. Please try again in a moment.");
     } finally {
       setLoading(false);
     }

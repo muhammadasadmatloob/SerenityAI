@@ -63,8 +63,8 @@ export default function HistoryScreen() {
 
   const handleDeleteSession = (id: number) => {
     Alert.alert(
-      "Delete Session",
-      "Are you sure you want to permanently delete this session and all its messages?",
+      "Clear Session",
+      "Are you sure you want to permanently clear this conversation from your journey?",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -82,11 +82,11 @@ export default function HistoryScreen() {
               if (res.ok) {
                 setHistory(prev => prev.filter(item => item.id !== id));
               } else {
-                Alert.alert("Error", "Could not delete session.");
+                Alert.alert("Oops", "We couldn't clear the session right now. Let's try again in a bit.");
               }
             } catch (err) {
               console.error("Delete error:", err);
-              Alert.alert("Error", "Network error. Try again.");
+              Alert.alert("Connection Interrupted", "We're having trouble connecting. Please try again later.");
             }
           }
         }

@@ -25,9 +25,9 @@ export default function EmailVerify() {
     try {
       setResending(true);
       await resendVerificationEmail();
-      Alert.alert("Sent", "Check your inbox for the link.");
+      Alert.alert("On Its Way", "We've sent a gentle reminder to your inbox with the link.");
     } catch (error: any) {
-      Alert.alert("Error", error.message);
+      Alert.alert("Oops", "We couldn't send the email right now. Please try again in a moment.");
     } finally {
       setResending(false);
     }

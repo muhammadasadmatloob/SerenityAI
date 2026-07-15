@@ -59,7 +59,7 @@ export default function ConnectingScreen() {
       try {
         const user = auth.currentUser;
         if (!user) {
-          Alert.alert("Error", "Login expired.");
+          Alert.alert("Session Paused", "It looks like your login expired. Let's sign in again.");
           if (isMounted) router.replace("/(screens)/Feel");
           return;
         }
@@ -117,12 +117,12 @@ export default function ConnectingScreen() {
         }
 
         if (isMounted) {
-          Alert.alert("Connection Failed", `${lastError}\n\nPlease check your internet connection and try again.`);
+          Alert.alert("Connection Interrupted", `We're having trouble connecting to Donna right now.\n\nPlease check your internet connection and try again.`);
           router.replace("/(screens)/Feel");
         }
       } catch (err: any) {
         if (isMounted) {
-          Alert.alert("Error", err.message || "Something went wrong. Please try again.");
+          Alert.alert("Oops", "Something went a little wrong. Please try again in a moment.");
           router.replace("/(screens)/Feel");
         }
       }

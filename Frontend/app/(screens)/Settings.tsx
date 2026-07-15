@@ -19,7 +19,10 @@ export default function SettingsScreen() {
 
   const handleUpdate = async () => {
     if (!oldPass || !newPass || !confirmPass) return Alert.alert("Required", "Please fill all fields.");
-    if (newPass !== confirmPass) return Alert.alert("Mismatch", "New password and confirm password do not match.");
+    if (newPass !== confirmPass) {
+      Alert.alert("Passwords Don't Match", "Make sure your new password and confirmation match perfectly.");
+      return;
+    }
     if (oldPass === newPass) return Alert.alert("Same Password", "New password must be different from old password.");
 
     setLoading(true);
@@ -32,34 +35,34 @@ export default function SettingsScreen() {
       });
       const valData = await valRes.json();
       if (!valRes.ok || !valData.success) {
-        Alert.alert("Weak Password", valData.message || "Password does not meet complexity requirements.");
+        Alert.alert("Let's Make It Stronger", valData.message || "Your password needs to be a little more complex to keep your account safe.");
         setLoading(false);
         return;
       }
     } catch (err: any) {
       console.log("Password validation request failed, falling back to local checks:", err);
       if (newPass.length < 8) {
-        Alert.alert("Weak Password", "New password must be at least 8 characters long.");
+        Alert.alert("Let's Make It Stronger", "Your new password needs to be at least 8 characters long.");
         setLoading(false);
         return;
       }
       if (!/[A-Z]/.test(newPass)) {
-        Alert.alert("Weak Password", "New password must contain at least one uppercase letter (A-Z).");
+        Alert.alert("Let's Make It Stronger", "Please include at least one uppercase letter (A-Z) in your password.");
         setLoading(false);
         return;
       }
       if (!/[a-z]/.test(newPass)) {
-        Alert.alert("Weak Password", "New password must contain at least one lowercase letter (a-z).");
+        Alert.alert("Let's Make It Stronger", "Please include at least one lowercase letter (a-z) in your password.");
         setLoading(false);
         return;
       }
       if (!/\d/.test(newPass)) {
-        Alert.alert("Weak Password", "New password must contain at least one number (0-9).");
+        Alert.alert("Let's Make It Stronger", "Please include at least one number (0-9) in your password.");
         setLoading(false);
         return;
       }
       if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPass)) {
-        Alert.alert("Weak Password", "New password must contain at least one special character (e.g., !, @, #, $, %, &, *).");
+        Alert.alert("Let's Make It Stronger", "Please include at least one special character (like !, @, or #) in your password.");
         setLoading(false);
         return;
       }
@@ -72,7 +75,7 @@ export default function SettingsScreen() {
         await reauthenticateWithCredential(user, cred);
         await updatePassword(user, newPass);
         Keyboard.dismiss();
-        Alert.alert("Success", "Password changed successfully.");
+        Alert.alert("All Set!", "Your password has been securely updated.");
         setOldPass("");
         setNewPass("");
         setConfirmPass("");
@@ -82,7 +85,7 @@ export default function SettingsScreen() {
       const msg = e?.code === "auth/wrong-password" || e?.code === "auth/invalid-credential"
         ? "Old password is incorrect. Please try again."
         : e?.message || "Authentication failed.";
-      Alert.alert("Error", msg);
+      Alert.alert("Oops", msg);
     } finally {
       setLoading(false);
     }

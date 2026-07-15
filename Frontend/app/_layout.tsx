@@ -255,9 +255,13 @@ export default function RootLayout() {
       // Force Profile Info completion
       if (!onInfoScreen) router.replace("/(screens)/Info");
     } else if (isProfileComplete === true) {
-      // Redirect to main app flow if coming from setup screens
+      // Redirect to Welcome screen if coming from setup screens
       const isOnSetupScreen = inAuthGroup || onVerifyScreen || onInfoScreen || onPrivacyScreen;
-      if (isOnSetupScreen) router.replace("/(screens)/Feel");
+      const isWelcomeScreen = currentScreen === "Welcome";
+      if (isOnSetupScreen && !isWelcomeScreen) {
+        const mode = onInfoScreen ? "signup" : "login";
+        router.replace({ pathname: "/(screens)/Welcome", params: { mode } });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAppReady, isProfileComplete, segments, networkError, user, hasAcceptedPrivacy]);

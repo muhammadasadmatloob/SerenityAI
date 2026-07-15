@@ -421,16 +421,16 @@ export default function ChatScreen() {
         if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
           Alert.alert(
             "Session Expired",
-            "This session has expired. Please start a new one.",
+            "This conversation has naturally concluded. Let's start a fresh one.",
             [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
           );
           return;
         }
-        Alert.alert("Error", data.message || "Failed to load chat history.");
+        Alert.alert("Oops", data.message || "We had trouble loading your past messages. Please try again.");
       }
     } catch {
       console.log("History Load Error");
-      Alert.alert("Connection Error", "Donna could not be reached to load history.");
+      Alert.alert("Connection Interrupted", "Donna couldn't load your history right now. Please check your connection.");
     }
   };
 
@@ -453,16 +453,16 @@ export default function ChatScreen() {
         if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
           Alert.alert(
             "Session Expired",
-            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            "This conversation has reached its 24-hour natural close. Let's start fresh.",
             [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
           );
           return;
         }
-        Alert.alert("Error", data.message || "Failed to load session status.");
+        Alert.alert("Oops", data.message || "We couldn't check your session status. Let's try again in a bit.");
       }
     } catch (e) {
       console.log("Error loading session duration", e);
-      Alert.alert("Connection Error", "Donna could not be reached to load session status.");
+      Alert.alert("Connection Interrupted", "We couldn't reach Donna to check your session. Please try again.");
     }
   };
 
@@ -480,16 +480,16 @@ export default function ChatScreen() {
         if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
           Alert.alert(
             "Session Expired",
-            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            "This conversation has reached its natural close. Let's start fresh.",
             [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
           );
           return;
         }
-        Alert.alert("Error", data.message || "Failed to load suggestions.");
+        Alert.alert("Oops", data.message || "We couldn't load suggestions right now. Take a deep breath and type what's on your mind.");
       }
     } catch (e) {
       console.log("Suggestions Load Error", e);
-      Alert.alert("Connection Error", "Donna could not be reached to load suggestions.");
+      Alert.alert("Connection Interrupted", "Donna couldn't find suggestions for you right now.");
     }
   };
 
@@ -509,11 +509,11 @@ export default function ChatScreen() {
             setSessionCap(data.session_cap_seconds);
           }
         } else {
-          Alert.alert("Error", data.message || "Failed to fetch active session.");
+          Alert.alert("Oops", data.message || "We had trouble picking up where you left off. Please try again.");
         }
       } catch (err) {
         console.log("Error fetching active session", err);
-        Alert.alert("Connection Error", "Donna could not be reached to find your active session.");
+        Alert.alert("Connection Interrupted", "We're having trouble connecting to Donna to find your session.");
       }
     }
     if (sid) {
@@ -723,25 +723,25 @@ export default function ChatScreen() {
         if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
           Alert.alert(
             "Session Expired",
-            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            "This conversation has reached its 24-hour natural close. Let's start fresh.",
             [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
           );
           return;
         }
-        Alert.alert("Error", data.message || "Failed to send message.");
+        Alert.alert("Oops", data.message || "Your message couldn't be sent just now. Let's try again.");
       }
     } catch {
       setHistory((prev) => prev.filter((msg) => msg.id !== tempUserId));
-      Alert.alert("Connection Error", "Donna could not be reached.");
+      Alert.alert("Connection Interrupted", "We couldn't reach Donna. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const endSession = () => {
-    Alert.alert("End Session", "Finish this conversation and start fresh later?", [
-      { text: "Continue", style: "cancel" },
-      { text: "End", style: "destructive", onPress: handleEnd },
+    Alert.alert("Ready to Wrap Up?", "Finish this conversation for now? You can always start a fresh one later.", [
+      { text: "Not Yet", style: "cancel" },
+      { text: "Wrap Up", style: "destructive", onPress: handleEnd },
     ]);
   };
 
@@ -751,7 +751,7 @@ export default function ChatScreen() {
     try {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Required", "Microphone access is needed for therapist calls.");
+        Alert.alert("Permission Required", "Donna needs microphone access to hear your beautiful voice.");
         return;
       }
 
@@ -773,7 +773,7 @@ export default function ChatScreen() {
       startCallListening();
     } catch (err) {
       console.log("Error starting call:", err);
-      Alert.alert("Call Error", "Could not start voice call.");
+      Alert.alert("Oops", "We couldn't connect the call right now. Please try again.");
     }
   };
 
@@ -1057,7 +1057,7 @@ export default function ChatScreen() {
         setSessionFinished(true);
         setCallStatus("ended");
         setIsCallActive(false);
-        Alert.alert("Session Finished", "See you tomorrow in next session.");
+        Alert.alert("Session Finished", "It was wonderful speaking with you. See you tomorrow in your next session.");
         return;
       }
 
@@ -1146,7 +1146,7 @@ export default function ChatScreen() {
     try {
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Required", "Microphone access is needed to record voice messages.");
+        Alert.alert("Permission Required", "Donna needs microphone access to hear your voice messages.");
         return;
       }
 
@@ -1173,7 +1173,7 @@ export default function ChatScreen() {
 
     } catch (err) {
       console.log("Error starting voice message recording:", err);
-      Alert.alert("Error", "Could not start recording.");
+      Alert.alert("Oops", "We couldn't quite start the recording. Let's try again.");
     }
   };
 
@@ -1277,19 +1277,19 @@ export default function ChatScreen() {
         if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
           Alert.alert(
             "Session Expired",
-            "Your session expired (conversations are capped at 24 hours). Please start a new one.",
+            "This conversation has reached its 24-hour natural close. Let's start fresh.",
             [{ text: "Start New Session", onPress: () => router.replace("/(screens)/Feel") }]
           );
           return;
         }
-        Alert.alert("Error", data.message || "Could not send voice message.");
+        Alert.alert("Oops", data.message || "Your voice message couldn't be sent just now. Let's try again.");
       }
     } catch (err) {
       console.log("Error sending voice message:", err);
       if (addedTempMsg) {
         setHistory(prev => prev.filter(msg => msg.id !== tempUserMsgId));
       }
-      Alert.alert("Connection Error", "Donna could not be reached.");
+      Alert.alert("Connection Interrupted", "We couldn't reach Donna. Please check your connection and try again.");
     } finally {
       setLoading(false);
       setRecordingDuration(0);

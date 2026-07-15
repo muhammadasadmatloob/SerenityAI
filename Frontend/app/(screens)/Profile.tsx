@@ -66,7 +66,7 @@ export default function ProfileScreen() {
       setReportModalVisible(false);
     } catch (e: any) {
       console.error(e);
-      Alert.alert("Error", e.message || "Something went wrong generating the report.");
+      Alert.alert("Oops", e.message || "We had a little trouble generating your report. Please try again.");
     } finally {
       setGeneratingReport(false);
     }

@@ -120,7 +120,7 @@ export default function FeelScreen() {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== "granted") {
-        Alert.alert("Permission Denied", "Microphone access is required for voice input.");
+        Alert.alert("Permission Required", "Donna needs microphone access to hear your beautiful voice.");
         return;
       }
 
@@ -139,7 +139,7 @@ export default function FeelScreen() {
       setIsListening(true);
     } catch (err) {
       console.error("Failed to start recording", err);
-      Alert.alert("Error", "Could not start audio recording. Check your permissions.");
+      Alert.alert("Oops", "We couldn't quite start the recording. Please check your microphone permissions.");
     }
   };
 
@@ -153,7 +153,7 @@ export default function FeelScreen() {
       setRecording(null);
 
       if (!uri) {
-        Alert.alert("Error", "No audio recording file found.");
+        Alert.alert("Audio Missing", "We couldn't find the audio file. Let's try recording again.");
         setIsTranscribing(false);
         return;
       }
@@ -161,7 +161,7 @@ export default function FeelScreen() {
       await transcribeAudioFile(uri);
     } catch (err) {
       console.error("Failed to stop recording", err);
-      Alert.alert("Error", "Failed to process audio recording.");
+      Alert.alert("Oops", "Something went wrong while processing the audio. Mind trying again?");
       setRecording(null);
       setIsTranscribing(false);
     }
@@ -171,7 +171,7 @@ export default function FeelScreen() {
     try {
       const user = auth.currentUser;
       if (!user) {
-        Alert.alert("Error", "Login session expired.");
+        Alert.alert("Session Paused", "It looks like your session expired. Let's log in again.");
         setIsTranscribing(false);
         return;
       }
@@ -198,11 +198,11 @@ export default function FeelScreen() {
         setDescription(result.transcript);
       } else {
         console.warn("Transcription API returned error:", result);
-        Alert.alert("Transcription Failed", "Could not transcribe audio. Please try again.");
+        Alert.alert("Oops", "We had a little trouble transcribing your audio. Please try again or type your message.");
       }
     } catch (err) {
       console.error("Transcription upload error:", err);
-      Alert.alert("Network Error", "Could not connect to server for transcription.");
+      Alert.alert("Connection Interrupted", "We couldn't connect to transcribe your voice right now. Try typing it out instead.");
     } finally {
       setIsTranscribing(false);
     }
@@ -224,8 +224,8 @@ export default function FeelScreen() {
     const isOnline = await checkInternetConnection();
     if (!isOnline) {
       Alert.alert(
-        "No Internet Connection",
-        "SerenityAI requires an active internet connection to start your session. Please check your cellular data or Wi-Fi settings."
+        "Connection Interrupted",
+        "Donna requires an active internet connection to chat. Please check your Wi-Fi or cellular data and try again."
       );
       return;
     }

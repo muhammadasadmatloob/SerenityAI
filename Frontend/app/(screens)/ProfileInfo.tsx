@@ -25,7 +25,7 @@ export default function ProfileInfoScreen() {
         const json = await res.json();
         setData(json);
     } catch { 
-        Alert.alert("Error", "Backend Unreachable."); 
+        Alert.alert("Connection Interrupted", "We couldn't reach the server right now. Let's try again in a bit."); 
     } finally { 
         setLoading(false); 
     }
@@ -72,13 +72,13 @@ export default function ProfileInfoScreen() {
 
   const handleSave = async () => {
     if (!data.name || !data.eName || !data.ePhone) {
-        Alert.alert("Error", "Please fill in all details.");
+        Alert.alert("Almost there!", "We just need a few more details from you. Please fill in all the blanks.");
         return;
     }
 
     const phoneRegex = /^\+\d{1,4}\d{10}$/;
     if (!phoneRegex.test(data.ePhone)) {
-        Alert.alert("Invalid Phone Number", "Phone number must start with + followed by the country code and exactly 10 digits (e.g., +923331234567).");
+        Alert.alert("Gentle Reminder", "Please enter your phone number starting with '+' followed by your country code and digits.");
         return;
     }
 
@@ -107,13 +107,13 @@ export default function ProfileInfoScreen() {
                 );
             }
             Keyboard.dismiss();
-            Alert.alert("Success", "Profile information updated.");
+            Alert.alert("All Set!", "Your profile information has been beautifully updated.");
         } else {
             const errJson = await res.json();
             throw new Error(errJson.detail || "Server update failed.");
         }
     } catch (err: any) { 
-        Alert.alert("Error", err.message || "Update failed."); 
+        Alert.alert("Oops", err.message || "We had a little trouble updating your profile. Please try again."); 
     } finally { 
         setUpdating(false); 
     }

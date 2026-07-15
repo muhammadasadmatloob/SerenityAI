@@ -2101,7 +2101,7 @@ async def chat_node(
 
     # Reject new inputs if duration exceeds timeout or session is explicitly ended
     if (sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS) or sess.is_ended:
-        return {"reply": "See you tomorrow in next session."}
+        return {"reply": "Looking forward to our next session."}
 
     # Crisis Management backend-enforced scan
     if backend_crisis_scan(data.content):
@@ -2275,8 +2275,8 @@ async def chat_voice(
 
     if (sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS) or sess.is_ended:
         return {
-            "user_message": {"id": 0, "text": "See you tomorrow in next session.", "audio_url": None},
-            "ai_message": {"id": 0, "text": "See you tomorrow in next session.", "audio_url": None}
+            "user_message": {"id": 0, "text": "Looking forward to our next session.", "audio_url": None},
+            "ai_message": {"id": 0, "text": "Looking forward to our next session.", "audio_url": None}
         }
 
     # 2. Save uploaded audio to a temp file and transcribe

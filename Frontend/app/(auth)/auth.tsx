@@ -92,8 +92,8 @@ export default function AuthScreen() {
           router.replace("/(screens)/EmailVerify");
           return;
         }
-        // Instantly transition to Welcome screen to mask backend loading times
-        router.replace({ pathname: "/(screens)/Welcome", params: { mode: "login" } });
+        // Let _layout.tsx handle the transition to Welcome screen via onSnapshot to prevent double routing
+        // router.replace({ pathname: "/(screens)/Welcome", params: { mode: "login" } });
       } else {
         await signupWithEmail(email, password, confirmPassword);
         router.replace("/(screens)/EmailVerify");

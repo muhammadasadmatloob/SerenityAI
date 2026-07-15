@@ -170,9 +170,9 @@ export default function InfoScreen() {
         { name: eName, phone: ePhone }
       );
 
-      // Step 2: Navigate instantly to mask backend syncing time
-      const router = require("expo-router").router;
-      router.replace({ pathname: "/(screens)/Welcome", params: { mode: "signup" } });
+      // Step 2: Let _layout.tsx handle the transition to Welcome screen via onSnapshot to prevent double routing
+      // const router = require("expo-router").router;
+      // router.replace({ pathname: "/(screens)/Welcome", params: { mode: "signup" } });
 
       // Step 3: Sync to backend in background (fire and forget)
       user.getIdToken().then(token => {

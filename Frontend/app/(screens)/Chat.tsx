@@ -553,7 +553,7 @@ export default function ChatScreen() {
             }).catch(() => {});
           }
 
-          Alert.alert("Session Finished", "See you tomorrow in next session.");
+          Alert.alert("Session Finished", "Looking forward to our next session.");
           if (isCallActive) {
             endCall();
           }
@@ -712,7 +712,7 @@ export default function ChatScreen() {
       });
       const data = await res.json();
       if (res.ok) {
-        if (data.reply === "See you tomorrow in next session.") {
+        if (data.reply === "Looking forward to our next session.") {
           setSessionFinished(true);
         }
         setHistory((prev) => [...prev, { id: tempUserId + 1, text: data.reply, sender: "ai" }]);
@@ -1053,11 +1053,11 @@ export default function ChatScreen() {
         { id: tempUserId + 1, text: reply, sender: "ai" }
       ]);
 
-      if (reply === "See you tomorrow in next session.") {
+      if (reply === "Looking forward to our next session.") {
         setSessionFinished(true);
         setCallStatus("ended");
         setIsCallActive(false);
-        Alert.alert("Session Finished", "It was wonderful speaking with you. See you tomorrow in your next session.");
+        Alert.alert("Session Finished", "It was wonderful speaking with you. Looking forward to our next session.");
         return;
       }
 
@@ -1245,7 +1245,7 @@ export default function ChatScreen() {
 
       const data = await res.json();
       if (res.ok) {
-        if (data.ai_message.text === "See you tomorrow in next session.") {
+        if (data.ai_message.text === "Looking forward to our next session.") {
           setSessionFinished(true);
         }
         
@@ -1524,7 +1524,7 @@ export default function ChatScreen() {
               >
                 <TextInput
                   ref={inputRef}
-                  placeholder={sessionFinished ? "See you tomorrow in next session." : "Talk to Donna..."}
+                  placeholder={sessionFinished ? "Looking forward to our next session." : "Talk to Donna..."}
                   value={message}
                   onChangeText={setMessage}
                   className="flex-1 text-slate-800 text-[16px] pr-8"

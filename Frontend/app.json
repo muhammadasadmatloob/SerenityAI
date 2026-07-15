@@ -15,7 +15,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FFFFFF",
+        "backgroundColor": "#081B29",
         "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "package": "com.asadmatloob.SerenityAI"

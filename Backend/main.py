@@ -197,7 +197,7 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
         "Content-Type": "application/json"
     }
     
-    model_name = os.getenv("MODEL_NAME", "/runpod-volume/Serenity/donna-merged")
+    model_name = "/runpod-volume/Serenity/donna-merged"
     
     payload = {
         "model": model_name,
@@ -1014,7 +1014,7 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
                 "Content-Type": "application/json"
             }
             
-            model_name = os.getenv("MODEL_NAME", "/runpod-volume/Serenity/donna-merged")
+            model_name = "/runpod-volume/Serenity/donna-merged"
             
             payload = {
                 "model": model_name,
@@ -1078,7 +1078,7 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
             def __init__(self, content): self.message = MockChoiceMessage(content)
         class MockCompletion:
             def __init__(self, content): self.choices = [MockChoice(content)]
-        default_json = json.dumps({"therapeutic_response": "I'm having a little trouble connecting right now, but I'm here for you. How are you feeling?"})
+        default_json = json.dumps({"therapeutic_response": f"I'm having a little trouble connecting right now (Error: {str(e)}). I'm here for you. How are you feeling?"})
         return MockCompletion(default_json)
 
 @lru_cache(maxsize=32)

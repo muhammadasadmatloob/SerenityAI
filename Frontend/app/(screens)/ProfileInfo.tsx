@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
-import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Keyboard } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Keyboard, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ChevronLeft, MapPin, Calendar, Mail, Fingerprint, User } from "lucide-react-native";
+import { ChevronLeft, MapPin, Calendar, Mail, User, Navigation, Home } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
@@ -13,7 +13,12 @@ export default function ProfileInfoScreen() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [data, setData] = useState<any>({});
-  const [address, setAddress] = useState("Locating...");
+  
+  // Locations
+  const [savedAddress, setSavedAddress] = useState("Locating...");
+  const [currentAddress, setCurrentAddress] = useState("Locating...");
+  const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
+
   const scrollRef = useRef<ScrollView>(null);
 
   const loadData = async () => {
@@ -24,6 +29,23 @@ export default function ProfileInfoScreen() {
         });
         const json = await res.json();
         setData(json);
+
+        // Fetch saved address from stored lat/lng
+        if (json.lat && json.lng && json.lat !== 0) {
+            const geocode = await Location.reverseGeocodeAsync({
+                latitude: json.lat,
+                longitude: json.lng
+            });
+            if (geocode && geocode.length > 0) {
+                const addr = geocode[0];
+                const parts = [addr.name, addr.district, addr.city, addr.country].filter(Boolean);
+                setSavedAddress(parts.join(", "));
+            } else {
+                setSavedAddress(`Lat: ${json.lat.toFixed(4)}, Lng: ${json.lng.toFixed(4)}`);
+            }
+        } else {
+            setSavedAddress("Location not saved");
+        }
     } catch { 
         Alert.alert("Connection Interrupted", "We couldn't reach the server right now. Let's try again in a bit."); 
     } finally { 
@@ -38,22 +60,22 @@ export default function ProfileInfoScreen() {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setAddress("Permission Denied");
+        setCurrentAddress("Permission Denied");
         return;
       }
       locationSubscription = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.Balanced, timeInterval: 5000, distanceInterval: 10 },
         async (loc) => {
-          setData((prev: any) => ({ ...prev, lat: loc.coords.latitude, lng: loc.coords.longitude }));
+          setCurrentLocation({ lat: loc.coords.latitude, lng: loc.coords.longitude });
           const [place] = await Location.reverseGeocodeAsync({
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude
           });
           if (place) {
             const formatted = [place.name, place.district, place.city, place.country].filter(Boolean).join(", ");
-            setAddress(formatted);
+            setCurrentAddress(formatted);
           } else {
-            setAddress(`${loc.coords.latitude.toFixed(2)}, ${loc.coords.longitude.toFixed(2)}`);
+            setCurrentAddress(`${loc.coords.latitude.toFixed(4)}, ${loc.coords.longitude.toFixed(4)}`);
           }
         }
       );
@@ -76,9 +98,19 @@ export default function ProfileInfoScreen() {
         return;
     }
 
-    const phoneRegex = /^\+\d{1,4}\d{10}$/;
+    if (!data.ePhone.startsWith("+")) {
+        Alert.alert("Gentle Reminder", "Please start your emergency phone number with a '+' and your country code.");
+        return;
+    }
+
+    if (data.ePhone.startsWith("+92") && data.ePhone.length !== 13) {
+        Alert.alert("Gentle Reminder", "Pakistani numbers (+92) must have exactly 10 digits after the country code (e.g. +923331234567).");
+        return;
+    }
+
+    const phoneRegex = /^\+\d{10,15}$/;
     if (!phoneRegex.test(data.ePhone)) {
-        Alert.alert("Gentle Reminder", "Please enter your phone number starting with '+' followed by your country code and digits.");
+        Alert.alert("Gentle Reminder", "Please enter a valid phone number with your country code and digits.");
         return;
     }
 
@@ -92,7 +124,6 @@ export default function ProfileInfoScreen() {
         });
         
         if (res.ok) {
-            // Dual write: sync to Firestore to ensure UI snapshot updates immediately
             const uid = auth.currentUser?.uid;
             if (uid) {
                 const birthDate = data.dob && data.dob !== "Not Set" ? new Date(data.dob) : new Date();
@@ -121,14 +152,27 @@ export default function ProfileInfoScreen() {
 
   if (loading) return <View className="flex-1 justify-center bg-[#F8FAFC]"><ActivityIndicator size="large" color="#808CEA" /></View>;
 
-  // Track Y positions for auto-scroll
+  // Format DOB correctly to local timezone
+  let formattedDob = "Not Set";
+  if (data.dob && data.dob !== "Not Set") {
+    try {
+      // The backend returns a naive datetime (e.g. "2004-10-17T19:00:00").
+      // Appending 'Z' forces it to be treated as UTC, which accurately reverses 
+      // the .toISOString() conversion applied when saving, restoring the exact local day.
+      const dobString = data.dob.includes('Z') ? data.dob : data.dob + 'Z';
+      const d = new Date(dobString);
+      formattedDob = d.toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' });
+    } catch {
+      formattedDob = data.dob.split('T')[0];
+    }
+  }
+
   let nameY = 0;
   let genderY = 0;
   let eNameY = 0;
 
-
   return (
-    <SafeAreaView className="flex-1 bg-white">
+    <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       <KeyboardAvoidingView 
         behavior={Platform.OS === "ios" ? "padding" : "height"} 
         className="flex-1"
@@ -136,78 +180,103 @@ export default function ProfileInfoScreen() {
       >
         <ScrollView 
           ref={scrollRef}
-          contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: 200 }} 
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }} 
           showsVerticalScrollIndicator={false} 
           keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity onPress={() => router.back()} className="mb-6 mt-4">
-              <ChevronLeft size={30} color="black" />
-          </TouchableOpacity>
-          
-          <Text className="text-3xl font-bold mb-8 text-gray-800">Personal Details</Text>
+          <View className="flex-row items-center mt-6 mb-8">
+            <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white rounded-full items-center justify-center shadow-sm border border-gray-100">
+                <ChevronLeft size={24} color="#1F2937" />
+            </TouchableOpacity>
+            <Text className="text-2xl font-bold ml-4 text-gray-800 tracking-tight">Your Details</Text>
+          </View>
 
           {/* --- READ ONLY SECTION --- */}
-          <View className="bg-white p-6 rounded-3xl mb-6 shadow-sm border border-gray-100">
-              <InfoRow icon={<Mail size={18} color="#94A3B8"/>} label="Email Address" value={data.email} />
-              <InfoRow icon={<Calendar size={18} color="#94A3B8"/>} label="Birth Date" value={data.dob?.split('T')[0] || "Not Set"} />
-              <InfoRow icon={<User size={18} color="#94A3B8"/>} label="Gender" value={data.gender || "Not Set"} />
+          <Text className="font-bold text-gray-800 text-lg mb-4 ml-2">Personal Identity</Text>
+          <View className="bg-white p-6 rounded-[30px] mb-8 shadow-sm border border-gray-100">
+              <InfoRow icon={<Mail size={18} color="#808CEA"/>} label="Email Address" value={data.email} />
+              <InfoRow icon={<Calendar size={18} color="#808CEA"/>} label="Birth Date" value={formattedDob} />
+              <InfoRow icon={<User size={18} color="#808CEA"/>} label="Gender" value={data.gender || "Not Set"} noBorder />
+          </View>
+
+          <Text className="font-bold text-gray-800 text-lg mb-4 ml-2">Location Identity</Text>
+          <View className="bg-white p-6 rounded-[30px] mb-8 shadow-sm border border-gray-100">
               <InfoRow 
-                  icon={<MapPin size={18} color="#94A3B8"/>} 
-                  label="Current Location" 
-                  value={address} 
+                  icon={<Home size={18} color="#808CEA"/>} 
+                  label="Home Sanctuary" 
+                  value={savedAddress} 
               />
+              <InfoRow 
+                  icon={<Navigation size={18} color="#808CEA"/>} 
+                  label="Current Presence" 
+                  value={currentAddress} 
+                  noBorder
+              />
+              {currentLocation && (
+                  <View className="mt-4 rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+                      <Image
+                        source={{ uri: `https://static-maps.yandex.ru/1.x/?ll=${currentLocation.lng},${currentLocation.lat}&z=15&l=map&size=600,300&pt=${currentLocation.lng},${currentLocation.lat},pm2rdm` }}
+                        style={{ width: "100%", height: 160 }}
+                        resizeMode="cover"
+                      />
+                  </View>
+              )}
           </View>
 
           {/* --- EDITABLE SECTION --- */}
-          <Text className="font-bold mb-2 text-gray-700 ml-1">Display Name</Text>
-          <View onLayout={(e) => { nameY = e.nativeEvent.layout.y; }}>
-            <TextInput 
-                value={data.name} 
-                onChangeText={(t) => setData({...data, name: t})} 
-                onFocus={() => handleInputFocus(nameY)}
-                className="bg-white p-5 rounded-2xl mb-6 border border-gray-100 shadow-sm text-gray-800" 
-            />
+          <Text className="font-bold text-gray-800 text-lg mb-4 ml-2">Update Profile</Text>
+          <View className="bg-white p-6 rounded-[30px] mb-8 shadow-sm border border-gray-100">
+            <Text className="font-bold mb-2 text-gray-700 ml-1">Display Name</Text>
+            <View onLayout={(e) => { nameY = e.nativeEvent.layout.y; }}>
+              <TextInput 
+                  value={data.name} 
+                  onChangeText={(t) => setData({...data, name: t})} 
+                  onFocus={() => handleInputFocus(nameY)}
+                  className="bg-[#F8FAFC] p-4 rounded-2xl mb-6 border border-[#E2E8F0] text-gray-800 font-medium" 
+              />
+            </View>
+
+            <Text className="font-bold mb-2 text-gray-700 ml-1">Gender</Text>
+            <View className="flex-row justify-between mb-2" onLayout={(e) => { genderY = e.nativeEvent.layout.y; }}>
+              {["Male", "Female", "Other"].map((g) => {
+                const isSel = data.gender === g;
+                return (
+                  <TouchableOpacity
+                    key={g}
+                    onPress={() => {
+                      setData({...data, gender: g});
+                      handleInputFocus(genderY);
+                    }}
+                    style={{
+                      backgroundColor: isSel ? "#808CEA" : "#F8FAFC",
+                      borderColor: isSel ? "#808CEA" : "#E2E8F0",
+                      borderWidth: 1,
+                      paddingVertical: 14,
+                      borderRadius: 16,
+                      flex: 1,
+                      marginHorizontal: 4,
+                      alignItems: "center"
+                    }}
+                  >
+                    <Text style={{ color: isSel ? "#FFFFFF" : "#1F2937", fontWeight: "600" }}>{g}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
-          <Text className="font-bold mb-2 text-gray-700 ml-1">Gender</Text>
-          <View className="flex-row justify-between mb-6" onLayout={(e) => { genderY = e.nativeEvent.layout.y; }}>
-            {["Male", "Female", "Other"].map((g) => {
-              const isSel = data.gender === g;
-              return (
-                <TouchableOpacity
-                  key={g}
-                  onPress={() => {
-                    setData({...data, gender: g});
-                    handleInputFocus(genderY);
-                  }}
-                  style={{
-                    backgroundColor: isSel ? "#808CEA" : "#FFFFFF",
-                    borderColor: isSel ? "#808CEA" : "#E2E8F0",
-                    borderWidth: 1,
-                    paddingVertical: 16,
-                    borderRadius: 20,
-                    flex: 1,
-                    marginHorizontal: 4,
-                    alignItems: "center"
-                  }}
-                >
-                  <Text style={{ color: isSel ? "#FFFFFF" : "#1F2937", fontWeight: "bold" }}>{g}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
+          <Text className="font-bold text-[#4A55A2] text-lg mb-4 ml-2">Emergency Contact</Text>
           <View 
-            className="bg-[#808CEA]/5 p-6 rounded-3xl mb-8 border border-[#808CEA]/10"
+            className="bg-[#808CEA]/5 p-6 rounded-[30px] mb-8 border border-[#808CEA]/20"
             onLayout={(e) => { eNameY = e.nativeEvent.layout.y; }}
           >
-              <Text className="font-bold mb-4 text-[#4A55A2]">Emergency Contact</Text>
+              <Text className="text-sm text-gray-500 mb-4 ml-1">Who should we contact in an emergency?</Text>
               <TextInput 
                   placeholder="Contact Person Name" 
                   value={data.eName} 
                   onChangeText={(t) => setData({...data, eName: t})} 
                   onFocus={() => handleInputFocus(eNameY)}
-                  className="bg-white p-4 rounded-xl mb-3 border border-gray-100 text-gray-800" 
+                  className="bg-white p-4 rounded-2xl mb-4 border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
               />
               <TextInput 
                   placeholder="Emergency Phone (e.g. +923331234567)" 
@@ -215,7 +284,7 @@ export default function ProfileInfoScreen() {
                   onChangeText={(t) => setData({...data, ePhone: t})} 
                   onFocus={() => handleInputFocus(eNameY + 80)}
                   keyboardType="phone-pad" 
-                  className="bg-white p-4 rounded-xl border border-gray-100 text-gray-800" 
+                  className="bg-white p-4 rounded-2xl border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
               />
           </View>
 
@@ -232,14 +301,14 @@ export default function ProfileInfoScreen() {
   );
 }
 
-const InfoRow = ({ icon, label, value }: any) => (
-    <View className="flex-row items-center mb-4">
-        <View className="w-10 h-10 items-center justify-center bg-gray-50 rounded-full mr-4">
+const InfoRow = ({ icon, label, value, noBorder }: any) => (
+    <View className={`flex-row items-center py-3 ${noBorder ? '' : 'border-b border-gray-50 mb-3'}`}>
+        <View className="w-10 h-10 items-center justify-center bg-[#808CEA]/10 rounded-full mr-4">
             {icon}
         </View>
         <View className="flex-1">
-            <Text className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{label}</Text>
-            <Text className="text-gray-600 font-medium" numberOfLines={1}>{value}</Text>
+            <Text className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">{label}</Text>
+            <Text className="text-gray-700 font-semibold" numberOfLines={2}>{value}</Text>
         </View>
     </View>
-);
+);

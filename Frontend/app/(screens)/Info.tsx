@@ -135,12 +135,22 @@ export default function InfoScreen() {
       return;
     }
 
-    const phoneRegex = /^\+\d{1,4}\d{10}$/;
-    if (!phoneRegex.test(ePhone)) {
-      Alert.alert("Gentle Reminder", "Please enter your phone number starting with '+' followed by your country code and digits.");
+    if (!ePhone.startsWith("+")) {
+      Alert.alert("Gentle Reminder", "Please start your emergency phone number with a '+' and your country code.");
       return;
     }
-    
+
+    if (ePhone.startsWith("+92") && ePhone.length !== 13) {
+      Alert.alert("Gentle Reminder", "Pakistani numbers (+92) must have exactly 10 digits after the country code (e.g. +923331234567).");
+      return;
+    }
+
+    const phoneRegex = /^\+\d{10,15}$/;
+    if (!phoneRegex.test(ePhone)) {
+      Alert.alert("Gentle Reminder", "Please enter a valid phone number with your country code and digits.");
+      return;
+    }
+
     const user = auth.currentUser;
     if (!user) {
       Alert.alert("Session Paused", "It looks like your session expired. Let's log in again.");
@@ -160,10 +170,13 @@ export default function InfoScreen() {
         { name: eName, phone: ePhone }
       );
 
-      // Step 2: Sync to backend (best-effort, don't block the user)
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch(`${BACKEND_URL}/api/info`, {
+      // Step 2: Navigate instantly to mask backend syncing time
+      const router = require("expo-router").router;
+      router.replace({ pathname: "/(screens)/Welcome", params: { mode: "signup" } });
+
+      // Step 3: Sync to backend in background (fire and forget)
+      user.getIdToken().then(token => {
+        fetch(`${BACKEND_URL}/api/info`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -178,13 +191,8 @@ export default function InfoScreen() {
             eName: eName,
             ePhone: ePhone,
           }),
-        });
-        if (!response.ok) {
-          console.log("Backend sync returned non-OK:", response.status);
-        }
-      } catch (backendErr) {
-        console.log("Backend sync failed (non-blocking):", backendErr);
-      }
+        }).catch(err => console.log("Backend sync failed:", err));
+      }).catch(err => console.log("Failed to get token for sync:", err));
     } catch (err: any) {
       Alert.alert("Oops", "We couldn't quite save your profile this time. Please try again in a moment.");
     } finally {

@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
+import { HeartPulse } from "lucide-react-native";
 
 import { AnimatePresence, MotiText, MotiView } from "moti";
 import { useEffect, useState, useRef } from "react";
@@ -290,24 +291,26 @@ export default function RootLayout() {
               style={StyleSheet.absoluteFillObject} 
             />
 
-            {/* Global Calming Breathing Brain Animation */}
-            <MotiView
-              from={{ scale: 0.95, opacity: 0.15 }}
-              animate={{ scale: 1.05, opacity: 0.25 }}
-              transition={{
-                type: "timing",
-                duration: 4000,
-                loop: true,
-                repeatReverse: true,
-              }}
-              style={{ position: 'absolute', top: '8%', alignSelf: 'center' }}
-            >
-              <Image
-                source={require("../assets/images/brain.png")}
-                style={{ width: width * 0.8, height: width * 0.8 }}
-                resizeMode="contain"
-              />
-            </MotiView>
+            {/* Global Calming Breathing Brain Animation - Only shown on Feel screen */}
+            {currentScreen === "Feel" && (
+              <MotiView
+                from={{ scale: 0.95, opacity: 0.15 }}
+                animate={{ scale: 1.05, opacity: 0.25 }}
+                transition={{
+                  type: "timing",
+                  duration: 4000,
+                  loop: true,
+                  repeatReverse: true,
+                }}
+                style={{ position: 'absolute', top: '8%', alignSelf: 'center' }}
+              >
+                <Image
+                  source={require("../assets/images/brain.png")}
+                  style={{ width: width * 0.8, height: width * 0.8 }}
+                  resizeMode="contain"
+                />
+              </MotiView>
+            )}
           </>
         ) : (
           <View style={[StyleSheet.absoluteFillObject, { backgroundColor: '#F8FAFC' }]} />
@@ -349,12 +352,9 @@ export default function RootLayout() {
                   from={{ scale: 0, opacity: 0 }} 
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring" }}
+                  className="items-center justify-center"
                 >
-                  <Image
-                    source={require("../assets/images/icon.png")}
-                    style={{ width: 120, height: 120, borderRadius: 30 }}
-                    resizeMode="contain"
-                  />
+                  <HeartPulse size={90} color="#FFFFFF" strokeWidth={1.5} />
                 </MotiView>
                 
                 <MotiText 

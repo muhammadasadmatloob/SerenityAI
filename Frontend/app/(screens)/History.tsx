@@ -97,10 +97,21 @@ export default function HistoryScreen() {
   return (
     <View className="flex-1 bg-transparent">
       <SafeAreaView className="flex-1" edges={['top']}>
-        {/* Modern Header */}
-        <View className="px-8 pt-8 pb-4">
-          <Text className="text-[34px] font-extrabold text-slate-800 tracking-tight">Your Journey</Text>
-          <Text className="text-slate-500 text-[15px] font-medium mt-1.5">Reflect on your past sessions and growth</Text>
+        {/* Beautiful Animated Header */}
+        <View className="px-8 pt-10 pb-6">
+          <MotiView 
+            from={{ opacity: 0, translateY: -15 }} 
+            animate={{ opacity: 1, translateY: 0 }} 
+            transition={{ type: "timing", duration: 600, ease: "easeOut" }}
+          >
+            <View className="flex-row items-center mb-3">
+              <View className="w-12 h-12 rounded-[18px] bg-[#808CEA]/15 items-center justify-center mr-4 border border-[#808CEA]/20">
+                <Calendar size={24} color="#808CEA" strokeWidth={2.5} />
+              </View>
+              <Text className="text-[36px] font-extrabold text-slate-800 tracking-tight">Your Journey</Text>
+            </View>
+            <Text className="text-slate-500 text-[15px] font-medium leading-6">Reflect on your past sessions, track your growth, and find peace in your progress.</Text>
+          </MotiView>
         </View>
         
         {loading ? (

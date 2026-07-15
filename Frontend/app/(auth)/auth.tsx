@@ -92,6 +92,8 @@ export default function AuthScreen() {
           router.replace("/(screens)/EmailVerify");
           return;
         }
+        // Instantly transition to Welcome screen to mask backend loading times
+        router.replace({ pathname: "/(screens)/Welcome", params: { mode: "login" } });
       } else {
         await signupWithEmail(email, password, confirmPassword);
         router.replace("/(screens)/EmailVerify");

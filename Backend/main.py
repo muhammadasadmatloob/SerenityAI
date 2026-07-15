@@ -171,7 +171,7 @@ def initialize_services():
 
     logger.info("🚀 All critical services validated successfully. Starting application server...")
 
-async def safe_runpod_completion(prompt: str, system_instruction: str, max_tokens: int = 4000, temperature: float = 0.3, response_format=None):
+async def safe_runpod_completion(prompt: str, system_instruction: str, max_tokens: int = 1000, temperature: float = 0.3, response_format=None):
     # Store the prompt in context for debugging on error
     llm_payload_context.set([{"role": "system", "content": system_instruction}, {"role": "user", "content": prompt}])
     
@@ -1050,7 +1050,7 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
         completion = await safe_runpod_completion(
             prompt=chat_history,
             system_instruction=system_instruction,
-            max_tokens=4000,
+            max_tokens=1000,
             temperature=0.65,
             response_format=response_format
         )
@@ -1716,7 +1716,7 @@ async def update_session_summary_task(session_id: int, uid: str):
             system_instruction="You are a clinical assistant. Summarize the session strictly in JSON.",
             temperature=0.3,
             response_format={"type": "json_object"},
-            max_tokens=4000
+            max_tokens=1000
         )
         raw_summary = res.choices[0].message.content or ""
         
@@ -2980,7 +2980,7 @@ IMPORTANT: Return ONLY the raw HTML string (no markdown blocks, no ```html tags,
     prompt = f"Patient Data for custom date range report:\n{json.dumps(data_dump, indent=2)}\n\nGenerate the Tailwind CSS styled HTML report now."
     
     try:
-        response = await safe_runpod_completion(prompt, system_instruction, max_tokens=3000, temperature=0.3)
+        response = await safe_runpod_completion(prompt, system_instruction, max_tokens=1000, temperature=0.3)
         html_content = response.choices[0].message.content.strip()
         if html_content.startswith("```html"):
             html_content = html_content[7:]

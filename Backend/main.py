@@ -196,8 +196,11 @@ async def safe_runpod_completion(prompt: str, system_instruction: str, max_token
         "Authorization": f"Bearer {runpod_api_key}",
         "Content-Type": "application/json"
     }
+    
+    model_name = os.getenv("MODEL_NAME", "/runpod-volume/Serenity/donna-merged")
+    
     payload = {
-        "model": "gpt-3.5-turbo", # Dummy model name for vLLM compatibility
+        "model": model_name,
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": prompt}
@@ -1010,8 +1013,11 @@ async def hybrid_ai_router(messages, current_phase: str, path: str = None, respo
                 "Authorization": f"Bearer {runpod_api_key}",
                 "Content-Type": "application/json"
             }
+            
+            model_name = os.getenv("MODEL_NAME", "/runpod-volume/Serenity/donna-merged")
+            
             payload = {
-                "model": "gpt-3.5-turbo",
+                "model": model_name,
                 "messages": [{"role": "user", "content": thinker_prompt}],
                 "max_tokens": 1000,
                 "temperature": 0.6

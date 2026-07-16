@@ -384,6 +384,11 @@ export default function InfoScreen() {
                 className="bg-white p-6 rounded-[35px] border border-[#E2E8F0] mb-6"
                 onLayout={(e) => { emergencyY = e.nativeEvent.layout.y; }}
               >
+                <View className="bg-[#808CEA]/5 p-4 rounded-xl mb-4 border border-[#808CEA]/10">
+                  <Text className="text-xs text-gray-700 font-medium leading-relaxed">
+                    <Text className="font-bold text-[#4A55A2]">Important:</Text> Please add the number of a trusted friend, family member, or your real human therapist. As an AI, Donna cannot physically intervene in a crisis, so this contact will be alerted with your live location if severe distress is detected.
+                  </Text>
+                </View>
                 <TextInput
                   placeholder="Emergency contact person name"
                   placeholderTextColor="#9CA3AF"

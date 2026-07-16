@@ -2,7 +2,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Send, LogOut, Phone, PhoneOff, Volume2, VolumeX, Mic, MicOff, Play, Pause } from "lucide-react-native";
 import { MotiView } from "moti";
 import React, { useState, useEffect, useRef } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, Alert, Modal, Keyboard, ActivityIndicator } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, Alert, Modal, Keyboard, ActivityIndicator, Linking } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
@@ -699,18 +699,21 @@ export default function ChatScreen() {
       }
       // Use Balanced accuracy to prevent hanging on Android devices with weak GPS signals
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const user = auth.currentUser;
-      const token = await user?.getIdToken();
-      const res = await fetch(`${BACKEND_URL}/api/emergency/trigger`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
-      });
-      const data = await res.json();
-      if (data.status === "alert_dispatched") {
-        Alert.alert("Emergency Alert Sent", "Your live location has been sent to your emergency contact via WhatsApp.");
+      
+      const mapsLink = `https://maps.google.com/?q=${loc.coords.latitude},${loc.coords.longitude}`;
+      const messageBody = `🚨 URGENT from Donna AI 🚨\n\nI am in a severe mental health crisis and may be in danger. Please reach out to me or send help immediately. Here is my current live location:\n${mapsLink}`;
+      
+      // Use the provided phone number as requested for the FYP demo fallback
+      const emergencyPhone = "+923198101512";
+      
+      // This will instantly open the user's WhatsApp with the message perfectly pre-typed!
+      const whatsappUrl = `whatsapp://send?phone=${emergencyPhone}&text=${encodeURIComponent(messageBody)}`;
+      
+      const canOpen = await Linking.canOpenURL(whatsappUrl);
+      if (canOpen) {
+        await Linking.openURL(whatsappUrl);
       } else {
-        Alert.alert("Emergency Alert Failed", `Backend issue: ${data.status || 'Unknown error'}`);
+        Alert.alert("WhatsApp Not Found", "We couldn't open WhatsApp on your device. Please install it.");
       }
     } catch (err) {
       Alert.alert("Emergency Alert Failed", "Make sure your device GPS (Location) is turned on!");

@@ -93,8 +93,13 @@ export default function ProfileInfoScreen() {
   };
 
   const handleSave = async () => {
-    if (!data.name || !data.eName || !data.ePhone) {
+    if (!data.name || !data.eName || !data.ePhone || !data.eEmail) {
         Alert.alert("Almost there!", "We just need a few more details from you. Please fill in all the blanks.");
+        return;
+    }
+
+    if (!data.eEmail.endsWith("@gmail.com")) {
+        Alert.alert("Emergency Email", "Please provide a valid emergency contact email ending in @gmail.com.");
         return;
     }
 
@@ -120,7 +125,7 @@ export default function ProfileInfoScreen() {
         const res = await fetch(`${BACKEND_URL}/api/profile/update`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ name: data.name, gender: data.gender, emergency_name: data.eName, emergency_phone: data.ePhone })
+            body: JSON.stringify({ name: data.name, gender: data.gender, emergency_name: data.eName, emergency_phone: data.ePhone, emergency_email: data.eEmail })
         });
         
         if (res.ok) {
@@ -134,7 +139,7 @@ export default function ProfileInfoScreen() {
                     birthDate,
                     data.gender || "Not Set",
                     location,
-                    { name: data.eName, phone: data.ePhone }
+                    { name: data.eName, phone: data.ePhone, email: data.eEmail }
                 );
             }
             Keyboard.dismiss();
@@ -288,6 +293,15 @@ export default function ProfileInfoScreen() {
                   onChangeText={(t) => setData({...data, ePhone: t})} 
                   onFocus={() => handleInputFocus(eNameY + 80)}
                   keyboardType="phone-pad" 
+                  className="bg-white p-4 rounded-2xl mb-4 border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
+              />
+              <TextInput 
+                  placeholder="Emergency Email (e.g. contact@gmail.com)" 
+                  value={data.eEmail} 
+                  onChangeText={(t) => setData({...data, eEmail: t})} 
+                  onFocus={() => handleInputFocus(eNameY + 160)}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
                   className="bg-white p-4 rounded-2xl border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
               />
           </View>

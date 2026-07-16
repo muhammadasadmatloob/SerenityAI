@@ -46,7 +46,7 @@ export const saveUserInfo = async (
   birthDate: Date, 
   gender: string,
   location: { latitude: number, longitude: number } | null,
-  emergencyContact: { name: string, phone: string }
+  emergencyContact: { name: string, phone: string, email: string }
 ) => {
   const userRef = doc(db, "users", uid);
   await setDoc(userRef, {

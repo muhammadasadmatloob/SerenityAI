@@ -472,6 +472,7 @@ class ProfileUpdate(BaseModel):
     gender: Optional[str] = None
     emergency_name: Optional[str] = None
     emergency_phone: Optional[str] = None
+    emergency_email: Optional[str] = None
 
 class InfoSync(BaseModel):
     name: str
@@ -481,6 +482,7 @@ class InfoSync(BaseModel):
     lng: float
     eName: str
     ePhone: str
+    eEmail: str
 
 class GoalCreate(BaseModel):
     goal: str
@@ -2793,6 +2795,7 @@ def get_stats(uid: str = Depends(get_current_uid), db: Session = Depends(get_db)
         "last_mood": last.mood if last else "neutral",
         "eName": user.emergency_name if user else "Not Set",
         "ePhone": user.emergency_phone if user else "Not Set",
+        "eEmail": user.emergency_email if user else "Not Set",
         "dob": user.dob.isoformat() if (user and user.dob) else "Not Set",
         "gender": user.gender if (user and user.gender) else "Not Set",
         "lat": user.lat if user else 0.0,
@@ -2834,6 +2837,7 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
     user.lng = data.lng
     user.emergency_name = data.eName
     user.emergency_phone = data.ePhone
+    user.emergency_email = data.eEmail
     db.commit()
     return {"status": "success"}
 
@@ -2849,6 +2853,8 @@ def update_profile(data: ProfileUpdate, uid: str = Depends(get_current_uid), db:
         user.emergency_name = data.emergency_name
     if data.emergency_phone is not None:
         user.emergency_phone = data.emergency_phone
+    if data.emergency_email is not None:
+        user.emergency_email = data.emergency_email
     db.commit()
     return {"status": "success"}
 
@@ -2917,8 +2923,8 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
             import smtplib
             from email.mime.text import MIMEText
             
-            # Send to the project gmail for the FYP demo
-            target_email = "donnaserenity25@gmail.com"
+            # Send to the user's configured emergency email
+            target_email = user.emergency_email if user.emergency_email else "donnaserenity25@gmail.com"
             
             msg = MIMEText(message_body)
             msg['Subject'] = f"🚨 URGENT: SerenityAI Emergency Alert for {user.name or 'User'}"

@@ -35,6 +35,7 @@ export default function InfoScreen() {
   const [address, setAddress] = useState("");
   const [eName, setEName] = useState("");
   const [ePhone, setEPhone] = useState("");
+  const [eEmail, setEEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
@@ -130,8 +131,13 @@ export default function InfoScreen() {
   };
 
   const handleContinue = async () => {
-    if (!name || !gender || !eName || !ePhone || !location) {
-      Alert.alert("Almost there!", "We need just a little more info. Please fill in your name, date of birth, gender, location, and emergency contact.");
+    if (!name || !gender || !eName || !ePhone || !eEmail || !location) {
+      Alert.alert("Almost there!", "We need just a little more info. Please fill in your name, date of birth, gender, location, and emergency contacts.");
+      return;
+    }
+
+    if (!eEmail.endsWith("@gmail.com")) {
+      Alert.alert("Emergency Email", "Please provide a valid emergency contact email ending in @gmail.com.");
       return;
     }
 
@@ -167,7 +173,7 @@ export default function InfoScreen() {
         birthDate,
         gender,
         { latitude: location.latitude, longitude: location.longitude },
-        { name: eName, phone: ePhone }
+        { name: eName, phone: ePhone, email: eEmail }
       );
 
       // Step 2: Let _layout.tsx handle the transition to Welcome screen via onSnapshot to prevent double routing
@@ -190,6 +196,7 @@ export default function InfoScreen() {
             lng: location.longitude,
             eName: eName,
             ePhone: ePhone,
+            eEmail: eEmail,
           }),
         }).catch(err => console.log("Backend sync failed:", err));
       }).catch(err => console.log("Failed to get token for sync:", err));
@@ -401,11 +408,22 @@ export default function InfoScreen() {
                 <TextInput
                   placeholder="Phone number (e.g. +923331234567)"
                   placeholderTextColor="#9CA3AF"
-                  className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800"
+                  className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800 mb-3"
                   keyboardType="phone-pad"
                   value={ePhone}
                   onChangeText={setEPhone}
                   onFocus={() => handleInputFocus(emergencyY + 80)}
+                  style={{ fontSize: 15, color: "#1F2937" }}
+                />
+                <TextInput
+                  placeholder="Emergency Email (e.g. contact@gmail.com)"
+                  placeholderTextColor="#9CA3AF"
+                  className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={eEmail}
+                  onChangeText={setEEmail}
+                  onFocus={() => handleInputFocus(emergencyY + 160)}
                   style={{ fontSize: 15, color: "#1F2937" }}
                 />
               </View>

@@ -19,6 +19,12 @@ engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 from sqlalchemy import inspect
 try:
     inspector = inspect(engine)
+    if 'users' in inspector.get_table_names():
+        user_columns = [c['name'] for c in inspector.get_columns('users')]
+        if 'emergency_email' not in user_columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN emergency_email VARCHAR"))
+                conn.commit()
     if 'sessions' in inspector.get_table_names():
         columns = [c['name'] for c in inspector.get_columns('sessions')]
         if 'is_ended' not in columns:
@@ -43,6 +49,7 @@ class User(Base):
     lng = Column(Float, nullable=True)
     emergency_name = Column(String, nullable=True)
     emergency_phone = Column(String, nullable=True)
+    emergency_email = Column(String, nullable=True)
     path = Column(String, nullable=True)
 
 class UserSession(Base):

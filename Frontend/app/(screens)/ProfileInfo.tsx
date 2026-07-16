@@ -85,13 +85,6 @@ export default function ProfileInfoScreen() {
     };
   }, []);
 
-  // Auto-scroll to the focused input so it stays visible above the keyboard
-  const handleInputFocus = (yOffset: number) => {
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: yOffset - 120, animated: true });
-    }, 300);
-  };
-
   const handleSave = async () => {
     if (!data.name || !data.eName || !data.ePhone || !data.eEmail) {
         Alert.alert("Almost there!", "We just need a few more details from you. Please fill in all the blanks.");
@@ -236,7 +229,6 @@ export default function ProfileInfoScreen() {
               <TextInput 
                   value={data.name} 
                   onChangeText={(t) => setData({...data, name: t})} 
-                  onFocus={() => handleInputFocus(nameY)}
                   className="bg-[#F8FAFC] p-4 rounded-2xl mb-6 border border-[#E2E8F0] text-gray-800 font-medium" 
               />
             </View>
@@ -250,7 +242,6 @@ export default function ProfileInfoScreen() {
                     key={g}
                     onPress={() => {
                       setData({...data, gender: g});
-                      handleInputFocus(genderY);
                     }}
                     style={{
                       backgroundColor: isSel ? "#808CEA" : "#F8FAFC",
@@ -284,14 +275,12 @@ export default function ProfileInfoScreen() {
                   placeholder="Contact Person Name" 
                   value={data.eName} 
                   onChangeText={(t) => setData({...data, eName: t})} 
-                  onFocus={() => handleInputFocus(eNameY)}
                   className="bg-white p-4 rounded-2xl mb-4 border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
               />
               <TextInput 
                   placeholder="Emergency Phone (e.g. +923331234567)" 
                   value={data.ePhone} 
                   onChangeText={(t) => setData({...data, ePhone: t})} 
-                  onFocus={() => handleInputFocus(eNameY + 80)}
                   keyboardType="phone-pad" 
                   className="bg-white p-4 rounded-2xl mb-4 border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
               />
@@ -299,7 +288,6 @@ export default function ProfileInfoScreen() {
                   placeholder="Emergency Email (e.g. contact@gmail.com)" 
                   value={data.eEmail} 
                   onChangeText={(t) => setData({...data, eEmail: t})} 
-                  onFocus={() => handleInputFocus(eNameY + 160)}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   className="bg-white p-4 rounded-2xl border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 

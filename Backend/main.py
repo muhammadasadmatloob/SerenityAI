@@ -2855,16 +2855,21 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
         try:
             from twilio.rest import Client
             client = Client(twilio_sid, twilio_token)
+            
+            # WhatsApp requires the 'whatsapp:' prefix for both sender and recipient
+            sender = f"whatsapp:{twilio_number}"
+            receiver = f"whatsapp:{user.emergency_phone}"
+            
             client.messages.create(
                 body=message_body,
-                from_=twilio_number,
-                to=user.emergency_phone
+                from_=sender,
+                to=receiver
             )
-            logger.info("Emergency SMS dispatched via Twilio.")
+            logger.info(f"Emergency WHATSAPP dispatched via Twilio to {receiver}.")
         except Exception as e:
-            logger.error(f"Failed to send Twilio SMS: {e}")
+            logger.error(f"Failed to send Twilio WhatsApp message: {e}")
     else:
-        logger.warning("Twilio credentials not found in .env. Emergency alert was logged but NOT sent via SMS.")
+        logger.warning("Twilio credentials not found in .env. Emergency alert was logged but NOT sent via WhatsApp.")
 
     return {"status": "alert_dispatched"}
 

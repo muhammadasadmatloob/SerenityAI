@@ -2883,7 +2883,8 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
     twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
     twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
     twilio_number = os.getenv("TWILIO_PHONE_NUMBER")
-
+    
+    twilio_status = "Twilio credentials missing"
     if twilio_sid and twilio_token and twilio_number:
         try:
             from twilio.rest import Client
@@ -2899,13 +2900,46 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
                 to=receiver
             )
             logger.info(f"Emergency WHATSAPP dispatched via Twilio to {receiver}.")
-            return {"status": "alert_dispatched"}
+            twilio_status = "alert_dispatched"
         except Exception as e:
             logger.error(f"Failed to send Twilio WhatsApp message: {e}")
-            return {"status": f"Twilio Error: {str(e)}"}
+            twilio_status = f"Twilio Error: {str(e)}"
     else:
         logger.warning("Twilio credentials not found in .env. Emergency alert was logged but NOT sent via WhatsApp.")
-        return {"status": "Missing Twilio Credentials in .env"}
+
+    # --- EMAIL FALLBACK/ADDITION ---
+    email_status = "Email credentials missing"
+    email_user = os.getenv("EMAIL_USER")
+    email_pass = os.getenv("EMAIL_PASSWORD")
+    
+    if email_user and email_pass:
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            
+            # Send to the project gmail for the FYP demo
+            target_email = "donnaserenity25@gmail.com"
+            
+            msg = MIMEText(message_body)
+            msg['Subject'] = f"🚨 URGENT: SerenityAI Emergency Alert for {user.name or 'User'}"
+            msg['From'] = email_user
+            msg['To'] = target_email
+            
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+                server.login(email_user, email_pass)
+                server.send_message(msg)
+                
+            logger.info(f"Emergency EMAIL dispatched to {target_email}.")
+            email_status = "email_dispatched"
+        except Exception as e:
+            logger.error(f"Failed to send Emergency Email: {e}")
+            email_status = f"Email Error: {str(e)}"
+
+    # If either succeeded, we tell the frontend it was dispatched
+    if twilio_status == "alert_dispatched" or email_status == "email_dispatched":
+        return {"status": "alert_dispatched"}
+    
+    return {"status": f"Twilio: {twilio_status} | Email: {email_status}"}
 
 # --- GOALS API ---
 

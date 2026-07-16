@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build Signed Android Release APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       # 1. Checkout codebase
@@ -99,3 +101,22 @@ jobs:
           name: app-release
           path: Frontend/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
+
+      # 10. Automatically copy the APK to the repository and commit it
+      - name: Commit and Push APK to Repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          mkdir -p APK
+          cp Frontend/android/app/build/outputs/apk/release/app-release.apk APK/SerenityAI.apk
+          
+          git add APK/SerenityAI.apk
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "build: auto-update APK/SerenityAI.apk with latest release [skip ci]"
+            git push origin main
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -694,18 +694,26 @@ export default function ChatScreen() {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        console.log("Emergency crisis detected, but location permission denied.");
+        Alert.alert("Emergency Alert Failed", "We could not send your location because location permissions are denied.");
         return;
       }
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+      // Use Balanced accuracy to prevent hanging on Android devices with weak GPS signals
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const user = auth.currentUser;
       const token = await user?.getIdToken();
-      await fetch(`${BACKEND_URL}/api/emergency/trigger`, {
+      const res = await fetch(`${BACKEND_URL}/api/emergency/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
       });
+      const data = await res.json();
+      if (data.status === "alert_dispatched") {
+        Alert.alert("Emergency Alert Sent", "Your live location has been sent to your emergency contact via WhatsApp.");
+      } else {
+        Alert.alert("Emergency Alert Failed", `Backend issue: ${data.status || 'Unknown error'}`);
+      }
     } catch (err) {
+      Alert.alert("Emergency Alert Failed", "Make sure your device GPS (Location) is turned on!");
       console.log("Failed to trigger emergency alert:", err);
     }
   };

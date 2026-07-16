@@ -2874,12 +2874,13 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
                 to=receiver
             )
             logger.info(f"Emergency WHATSAPP dispatched via Twilio to {receiver}.")
+            return {"status": "alert_dispatched"}
         except Exception as e:
             logger.error(f"Failed to send Twilio WhatsApp message: {e}")
+            return {"status": f"Twilio Error: {str(e)}"}
     else:
         logger.warning("Twilio credentials not found in .env. Emergency alert was logged but NOT sent via WhatsApp.")
-
-    return {"status": "alert_dispatched"}
+        return {"status": "Missing Twilio Credentials in .env"}
 
 # --- GOALS API ---
 

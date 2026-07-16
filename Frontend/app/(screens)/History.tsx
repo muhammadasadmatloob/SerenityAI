@@ -102,7 +102,7 @@ export default function HistoryScreen() {
           <MotiView 
             from={{ opacity: 0, translateY: -15 }} 
             animate={{ opacity: 1, translateY: 0 }} 
-            transition={{ type: "timing", duration: 600, ease: "easeOut" }}
+            transition={{ type: "timing", duration: 600, ease: "easeOut" } as any}
           >
             <View className="flex-row items-center mb-3">
               <View className="w-12 h-12 rounded-[18px] bg-[#808CEA]/15 items-center justify-center mr-4 border border-[#808CEA]/20">

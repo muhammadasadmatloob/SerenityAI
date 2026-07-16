@@ -293,7 +293,6 @@ export default function InfoScreen() {
                   className="bg-white px-6 py-5 rounded-3xl mb-6 border border-[#E2E8F0] text-gray-800"
                   value={name}
                   onChangeText={setName}
-                  onFocus={() => handleInputFocus(nameY)}
                   style={{ fontSize: 16, color: "#1F2937" }}
                 />
               </View>

@@ -43,7 +43,7 @@ export default function Welcome() {
       <MotiView
         from={{ opacity: 0, scale: 0.8, translateY: 20 }}
         animate={{ opacity: 1, scale: 1, translateY: 0 }}
-        transition={{ type: "timing", duration: 1000, ease: "easeOut" }}
+        transition={{ type: "timing", duration: 1000, ease: "easeOut" } as any}
         style={styles.content}
       >
         <Heart size={48} color="#FFFFFF" style={{ marginBottom: 24, alignSelf: 'center' }} />

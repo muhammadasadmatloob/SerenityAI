@@ -1008,7 +1008,11 @@ CRISIS_KEYWORDS = [
     r"\bhurt\s?myself\b",
     r"\bwant\s?to\s?die\b",
     r"\bbetter\s?off\s?dead\b",
-    r"\bcant\s?live\s?anymore\b"
+    r"\bcant\s?live\s?anymore\b",
+    r"\bjump\s?from\b",
+    r"\bjump\s?off\b",
+    r"\bhurt\s?myself\b",
+    r"\bnot\s?worth\s?living\b"
 ]
 
 def backend_crisis_scan(text: str) -> bool:

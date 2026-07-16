@@ -1015,20 +1015,41 @@ CRISIS_KEYWORDS = [
     r"\bnot\s?worth\s?living\b"
 ]
 
-def backend_crisis_scan(text: str) -> bool:
+async def backend_crisis_scan(text: str) -> bool:
+    # First, quick fallback regex scan
     for pattern in CRISIS_KEYWORDS:
         if re.search(pattern, text, re.IGNORECASE):
             return True
+            
+    # Then, semantic scan using LLM to understand full meaning
+    prompt = (
+        "You are a strict safety classifier for a therapy app. Your ONLY job is to determine if the user's message indicates "
+        "an active crisis, specifically: suicidal ideation, intent to commit suicide, intent to cause severe self-harm, "
+        "or jumping/killing themselves. "
+        "Reply with EXACTLY the word 'TRUE' if the message expresses intent or thoughts of suicide/self-harm. "
+        "Reply with EXACTLY the word 'FALSE' if it does not."
+    )
+    try:
+        res = await safe_gemini_completion(
+            prompt=f"User message: {text}",
+            system_instruction=prompt,
+            temperature=0.0
+        )
+        reply = res.choices[0].message.content.strip().upper()
+        if "TRUE" in reply:
+            return True
+    except Exception as e:
+        logger.error(f"Semantic crisis scan failed: {e}")
+        
     return False
 
 CRISIS_RESPONSE = (
     "I hear how much pain you're in right now, and I want to support you, but as an AI, "
     "I cannot provide the crisis intervention you need. Your safety is extremely important. "
-    "Please connect with a professional or contact emergency services in your country immediately. "
-    "You can call or text your local emergency number (like 911, 999, or 112), call a national helpline "
-    "(such as 988 in the US/Canada, or 111/999 in the UK), or visit https://findahelpline.com/ "
-    "to find free, confidential support in your area. Let's take a slow, deep breath together. "
-    "Please reach out to local emergency services first."
+    "Please connect with a professional or contact emergency services in Pakistan immediately. "
+    "You can call Umang Pakistan (0311-7786264), Taskeen Health Initiative (0316-2843362), "
+    "or the Edhi Foundation (115) for free, confidential support. "
+    "Let's take a slow, deep breath together. Please reach out to these emergency services first."
 )
 
 BOUNDARY_RESPONSE = (
@@ -2116,7 +2137,7 @@ async def chat_node(
         return {"reply": "Looking forward to our next session.", "crisis_detected": False}
 
     # Crisis Management backend-enforced scan
-    if backend_crisis_scan(data.content):
+    if await backend_crisis_scan(data.content):
         # Save user message
         user_msg = Message(session_id=data.session_id, role="user", content=encrypt(data.content))
         db.add(user_msg)

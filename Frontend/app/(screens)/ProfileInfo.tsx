@@ -174,13 +174,13 @@ export default function ProfileInfoScreen() {
   return (
     <SafeAreaView className="flex-1 bg-[#F8FAFC]">
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"} 
+        behavior={Platform.OS === "ios" ? "padding" : undefined} 
         className="flex-1"
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <ScrollView 
           ref={scrollRef}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 100 }} 
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 300 }} 
           showsVerticalScrollIndicator={false} 
           keyboardShouldPersistTaps="handled"
         >

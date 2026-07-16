@@ -2627,7 +2627,7 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
     )
     
     try:
-        res = await safe_runpod_completion(
+        res = await safe_gemini_completion(
             prompt=f"Conversation history:\n{conversation_str}\n\nWhat are the next 3 reply options for the User responding to Donna's last message?",
             system_instruction=prompt,
             temperature=0.7

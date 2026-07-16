@@ -749,22 +749,23 @@ export default function ChatScreen() {
   const startCall = async () => {
     if (sessionFinished) return;
     try {
+      // Force reset speaker states immediately
+      setIsSpeakerOn(false);
+      isSpeakerOnRef.current = false;
+
+      // Aggressively force earpiece mode before even requesting permissions
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        playThroughEarpieceAndroid: true,
+      });
+
       const { status } = await Audio.requestPermissionsAsync();
       if (status !== "granted") {
         Alert.alert("Permission Required", "Donna needs microphone access to hear your beautiful voice.");
         return;
       }
-      
-      // Always default to speaker OFF (private earpiece mode) for a new call
-      setIsSpeakerOn(false);
-      isSpeakerOnRef.current = false;
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        playThroughEarpieceAndroid: !isSpeakerOnRef.current,
-      });
 
       setIsCallActive(true);
       isCallActiveRef.current = true;

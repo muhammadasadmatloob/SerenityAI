@@ -470,8 +470,8 @@ class DurationUpdate(BaseModel):
 class ProfileUpdate(BaseModel):
     name: str
     gender: Optional[str] = None
-    emergency_name: str
-    emergency_phone: str
+    emergency_name: Optional[str] = None
+    emergency_phone: Optional[str] = None
 
 class InfoSync(BaseModel):
     name: str
@@ -2101,7 +2101,7 @@ async def chat_node(
 
     # Reject new inputs if duration exceeds timeout or session is explicitly ended
     if (sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS) or sess.is_ended:
-        return {"reply": "Looking forward to our next session."}
+        return {"reply": "Looking forward to our next session.", "crisis_detected": False}
 
     # Crisis Management backend-enforced scan
     if backend_crisis_scan(data.content):
@@ -2126,7 +2126,7 @@ async def chat_node(
         ai_msg = Message(session_id=data.session_id, role="assistant", content=encrypt(CRISIS_RESPONSE))
         db.add(ai_msg)
         db.commit()
-        return {"reply": CRISIS_RESPONSE}
+        return {"reply": CRISIS_RESPONSE, "crisis_detected": True}
 
     user_msg = Message(session_id=data.session_id, role="user", content=encrypt(data.content))
     db.add(user_msg)
@@ -2251,11 +2251,11 @@ async def chat_node(
         # Enqueue background task to run the pipeline updates and session summary
         background_tasks.add_task(run_background_pipeline, data.session_id, uid, user_msg.id, parsed_data)
         
-        return {"reply": ai_msg_text}
+        return {"reply": ai_msg_text, "crisis_detected": False}
     except Exception as e:
         logger.error(f"Chat Error: {e}")
         fallback_reply = "I'm listening, but my connection is a bit slow. Please go on."
-        return {"reply": fallback_reply}
+        return {"reply": fallback_reply, "crisis_detected": False}
 
 @app.post("/api/chat/voice")
 async def chat_voice(
@@ -2812,10 +2812,61 @@ def update_profile(data: ProfileUpdate, uid: str = Depends(get_current_uid), db:
     user.name = data.name
     if data.gender:
         user.gender = data.gender
-    user.emergency_name = data.emergency_name
-    user.emergency_phone = data.emergency_phone
+    if data.emergency_name is not None:
+        user.emergency_name = data.emergency_name
+    if data.emergency_phone is not None:
+        user.emergency_phone = data.emergency_phone
     db.commit()
     return {"status": "success"}
+
+class EmergencyTrigger(BaseModel):
+    lat: float
+    lng: float
+
+@app.post("/api/emergency/trigger")
+def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
+    user = db.query(User).filter_by(firebase_uid=uid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    if not user.emergency_phone:
+        logger.warning(f"Crisis triggered for user {uid}, but no emergency contact is set!")
+        return {"status": "no_contact_set"}
+
+    maps_link = f"https://maps.google.com/?q={data.lat},{data.lng}"
+    message_body = (
+        f"🚨 URGENT from Donna AI 🚨\n\n"
+        f"Your friend/relative {user.name or 'the user'} is in a severe mental health crisis and may be in danger. "
+        f"Please reach out to them or send help immediately. Here is their current live location:\n{maps_link}"
+    )
+
+    logger.error("="*50)
+    logger.error("CRISIS EMERGENCY TRIGGERED!")
+    logger.error(f"Target Contact: {user.emergency_name} ({user.emergency_phone})")
+    logger.error(f"Message: {message_body}")
+    logger.error("="*50)
+
+    # TODO: Integration with Twilio for actual SMS
+    twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
+    twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
+    twilio_number = os.getenv("TWILIO_PHONE_NUMBER")
+
+    if twilio_sid and twilio_token and twilio_number:
+        try:
+            from twilio.rest import Client
+            client = Client(twilio_sid, twilio_token)
+            client.messages.create(
+                body=message_body,
+                from_=twilio_number,
+                to=user.emergency_phone
+            )
+            logger.info("Emergency SMS dispatched via Twilio.")
+        except Exception as e:
+            logger.error(f"Failed to send Twilio SMS: {e}")
+    else:
+        logger.warning("Twilio credentials not found in .env. Emergency alert was logged but NOT sent via SMS.")
+
+    return {"status": "alert_dispatched"}
 
 # --- GOALS API ---
 

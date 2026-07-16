@@ -270,7 +270,11 @@ export default function ProfileInfoScreen() {
             className="bg-[#808CEA]/5 p-6 rounded-[30px] mb-8 border border-[#808CEA]/20"
             onLayout={(e) => { eNameY = e.nativeEvent.layout.y; }}
           >
-              <Text className="text-sm text-gray-500 mb-4 ml-1">Who should we contact in an emergency?</Text>
+              <View className="bg-white/60 p-4 rounded-xl mb-4 border border-[#808CEA]/10">
+                <Text className="text-xs text-gray-700 font-medium leading-relaxed">
+                  <Text className="font-bold text-[#4A55A2]">Important:</Text> Please add the number of a trusted friend, family member, or your real human therapist. As an AI, Donna cannot physically intervene in a crisis, so this contact will be alerted with your live location if severe distress is detected.
+                </Text>
+              </View>
               <TextInput 
                   placeholder="Contact Person Name" 
                   value={data.eName} 

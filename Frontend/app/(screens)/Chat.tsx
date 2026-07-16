@@ -7,6 +7,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
 import { Audio } from "expo-av";
+import * as Location from 'expo-location';
 import { LinearGradient } from "expo-linear-gradient";
 
 const SUGGESTIONS = [
@@ -689,6 +690,26 @@ export default function ChatScreen() {
     }
   };
 
+  const triggerEmergencyAlert = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log("Emergency crisis detected, but location permission denied.");
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+      const user = auth.currentUser;
+      const token = await user?.getIdToken();
+      await fetch(`${BACKEND_URL}/api/emergency/trigger`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
+      });
+    } catch (err) {
+      console.log("Failed to trigger emergency alert:", err);
+    }
+  };
+
   const handleSend = async () => {
     if (!message.trim() || loading || !activeId || sessionFinished) return;
     const userTxt = message.trim();
@@ -718,6 +739,11 @@ export default function ChatScreen() {
         setHistory((prev) => [...prev, { id: tempUserId + 1, text: data.reply, sender: "ai" }]);
         playSoundEffect("receive");
         fetchSuggestions(activeId);
+        
+        // Trigger emergency alert quietly in background if crisis detected
+        if (data.crisis_detected) {
+          triggerEmergencyAlert();
+        }
       } else {
         setHistory((prev) => prev.filter((msg) => msg.id !== tempUserId));
         if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
@@ -1048,6 +1074,11 @@ export default function ChatScreen() {
       }
       const chatData = await chatRes.json();
       const reply = chatData.reply || "";
+
+      // Trigger emergency alert quietly in background if crisis detected
+      if (chatData.crisis_detected) {
+        triggerEmergencyAlert();
+      }
 
       if (!isCallActiveRef.current) return;
 

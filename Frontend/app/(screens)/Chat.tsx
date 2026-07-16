@@ -707,14 +707,14 @@ export default function ChatScreen() {
         body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
       });
       const data = await res.json();
+      // Silently handle the response so the user is unaware
       if (data.status === "alert_dispatched") {
-        Alert.alert("Emergency Alert Sent", "Your live location has been sent to your emergency contact via WhatsApp.");
+        console.log("Emergency alert successfully dispatched silently.");
       } else {
-        Alert.alert("Emergency Alert Failed", `Backend issue: ${data.status || 'Unknown error'}`);
+        console.log("Backend emergency issue:", data.status);
       }
     } catch (err) {
-      Alert.alert("Emergency Alert Failed", "Make sure your device GPS (Location) is turned on!");
-      console.log("Failed to trigger emergency alert:", err);
+      console.log("Failed to trigger emergency alert (GPS likely off):", err);
     }
   };
 

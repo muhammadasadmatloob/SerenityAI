@@ -1995,7 +1995,7 @@ async def start_sess(
         
     # Crisis Management backend-enforced scan
     initial_desc = data.description.strip() if (data.description and data.description.strip()) else ""
-    if backend_crisis_scan(initial_desc) or data.mood.lower() in ["crisis", "suicidal"]:
+    if await backend_crisis_scan(initial_desc) or data.mood.lower() in ["crisis", "suicidal"]:
         # Log crisis event
         crisis_event = CrisisEvent(
             session_id=session_id_val,

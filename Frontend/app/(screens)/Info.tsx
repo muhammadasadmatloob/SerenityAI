@@ -40,12 +40,7 @@ export default function InfoScreen() {
   const [locating, setLocating] = useState(false);
   const [showMapModal, setShowMapModal] = useState(false);
 
-  // Auto-scroll to inputs on focus
-  const handleInputFocus = (yOffset: number) => {
-    setTimeout(() => {
-      scrollRef.current?.scrollTo({ y: yOffset - 40, animated: true });
-    }, 300);
-  };
+
 
   const handleGetLocation = async () => {
     setLocating(true);
@@ -270,13 +265,13 @@ export default function InfoScreen() {
     <SafeAreaView className="flex-1 bg-[#FBFBFF]">
       <Stack.Screen options={{ gestureEnabled: false, headerShown: false }} />
       <KeyboardAvoidingView 
-        behavior={Platform.OS === "ios" ? "padding" : "height"} 
+        behavior={Platform.OS === "ios" ? "padding" : undefined} 
         className="flex-1"
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         <ScrollView 
           ref={scrollRef}
-          contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: 250 }} 
+          contentContainerStyle={{ paddingHorizontal: 32, paddingBottom: 400 }} 
           showsVerticalScrollIndicator={false} 
           keyboardShouldPersistTaps="handled"
         >
@@ -402,7 +397,6 @@ export default function InfoScreen() {
                   className="bg-[#F8FAFC] px-5 py-4 rounded-2xl mb-3 border border-[#EDF2F7] text-gray-800"
                   value={eName}
                   onChangeText={setEName}
-                  onFocus={() => handleInputFocus(emergencyY)}
                   style={{ fontSize: 15, color: "#1F2937" }}
                 />
                 <TextInput
@@ -412,7 +406,6 @@ export default function InfoScreen() {
                   keyboardType="phone-pad"
                   value={ePhone}
                   onChangeText={setEPhone}
-                  onFocus={() => handleInputFocus(emergencyY + 80)}
                   style={{ fontSize: 15, color: "#1F2937" }}
                 />
                 <TextInput
@@ -423,7 +416,6 @@ export default function InfoScreen() {
                   autoCapitalize="none"
                   value={eEmail}
                   onChangeText={setEEmail}
-                  onFocus={() => handleInputFocus(emergencyY + 160)}
                   style={{ fontSize: 15, color: "#1F2937" }}
                 />
               </View>

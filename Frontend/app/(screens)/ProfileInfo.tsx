@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert, ActivityIndicator, ScrollView, KeyboardAvoidingView, Platform, Keyboard, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ChevronLeft, MapPin, Calendar, Mail, User, Navigation, Home } from "lucide-react-native";
+import { ChevronLeft, MapPin, Calendar, Mail, User, Navigation, Home, Phone } from "lucide-react-native";
 import { useRouter } from "expo-router";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
@@ -86,8 +86,25 @@ export default function ProfileInfoScreen() {
   }, []);
 
   const handleSave = async () => {
-    if (!data.name || !data.eName || !data.ePhone) {
+    if (!data.name || !data.phone || !data.eName || !data.ePhone) {
         Alert.alert("Almost there!", "We just need a few more details from you. Please fill in all the blanks.");
+        return;
+    }
+
+    const phoneRegex = /^\+\d{10,15}$/;
+
+    if (!data.phone.startsWith("+")) {
+        Alert.alert("Gentle Reminder", "Please start your personal phone number with a '+' and your country code.");
+        return;
+    }
+
+    if (data.phone.startsWith("+92") && data.phone.length !== 13) {
+        Alert.alert("Gentle Reminder", "Pakistani personal numbers (+92) must have exactly 10 digits after the country code (e.g. +923331234567).");
+        return;
+    }
+
+    if (!phoneRegex.test(data.phone)) {
+        Alert.alert("Gentle Reminder", "Please enter a valid personal phone number with your country code.");
         return;
     }
 
@@ -97,13 +114,12 @@ export default function ProfileInfoScreen() {
     }
 
     if (data.ePhone.startsWith("+92") && data.ePhone.length !== 13) {
-        Alert.alert("Gentle Reminder", "Pakistani numbers (+92) must have exactly 10 digits after the country code (e.g. +923331234567).");
+        Alert.alert("Gentle Reminder", "Pakistani emergency numbers (+92) must have exactly 10 digits after the country code (e.g. +923331234567).");
         return;
     }
 
-    const phoneRegex = /^\+\d{10,15}$/;
     if (!phoneRegex.test(data.ePhone)) {
-        Alert.alert("Gentle Reminder", "Please enter a valid phone number with your country code and digits.");
+        Alert.alert("Gentle Reminder", "Please enter a valid emergency phone number with your country code.");
         return;
     }
 
@@ -113,7 +129,7 @@ export default function ProfileInfoScreen() {
         const res = await fetch(`${BACKEND_URL}/api/profile/update`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ name: data.name, gender: data.gender, emergency_name: data.eName, emergency_phone: data.ePhone, emergency_email: "" })
+            body: JSON.stringify({ name: data.name, gender: data.gender, phone: data.phone, emergency_name: data.eName, emergency_phone: data.ePhone, emergency_email: "" })
         });
         
         if (res.ok) {
@@ -124,6 +140,7 @@ export default function ProfileInfoScreen() {
                 await saveUserInfo(
                     uid,
                     data.name,
+                    data.phone || "",
                     birthDate,
                     data.gender || "Not Set",
                     location,
@@ -188,6 +205,7 @@ export default function ProfileInfoScreen() {
           <Text className="font-bold text-gray-800 text-lg mb-4 ml-2">Personal Identity</Text>
           <View className="bg-white p-6 rounded-[30px] mb-8 shadow-sm border border-gray-100">
               <InfoRow icon={<Mail size={18} color="#808CEA"/>} label="Email Address" value={data.email} />
+              <InfoRow icon={<Phone size={18} color="#808CEA"/>} label="Personal Phone" value={data.phone || "Not Set"} />
               <InfoRow icon={<Calendar size={18} color="#808CEA"/>} label="Birth Date" value={formattedDob} />
               <InfoRow icon={<User size={18} color="#808CEA"/>} label="Gender" value={data.gender || "Not Set"} noBorder />
           </View>
@@ -254,6 +272,20 @@ export default function ProfileInfoScreen() {
                 );
               })}
             </View>
+
+            <Text className="font-bold mb-2 text-gray-700 ml-1 mt-4">Personal Phone Number</Text>
+            <View className="bg-slate-50 p-4 rounded-xl mb-4 border border-gray-100">
+              <Text className="text-xs text-gray-700 font-medium leading-relaxed">
+                Please enter the phone number you actively use and have on WhatsApp. Ensure this is a number that your family and friends know, so they can easily recognize it when we reach out to them in an emergency.
+              </Text>
+            </View>
+            <TextInput 
+                value={data.phone || ""} 
+                onChangeText={(t) => setData({...data, phone: t})} 
+                keyboardType="phone-pad" 
+                placeholder="WhatsApp Number (e.g. +923331234567)"
+                className="bg-[#F8FAFC] p-4 rounded-2xl border border-[#E2E8F0] text-gray-800 font-medium" 
+            />
           </View>
 
           <Text className="font-bold text-[#4A55A2] text-lg mb-4 ml-2">Emergency Contact</Text>

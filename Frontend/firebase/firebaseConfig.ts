@@ -43,6 +43,7 @@ export const logoutUser = async () => await signOut(auth);
 export const saveUserInfo = async (
   uid: string, 
   name: string, 
+  phone: string,
   birthDate: Date, 
   gender: string,
   location: { latitude: number, longitude: number } | null,
@@ -52,6 +53,7 @@ export const saveUserInfo = async (
   await setDoc(userRef, {
     uid,
     name,
+    phone,
     birthDate: birthDate.toISOString(),
     gender,
     location,

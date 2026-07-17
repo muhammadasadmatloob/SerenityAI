@@ -470,6 +470,7 @@ class DurationUpdate(BaseModel):
 class ProfileUpdate(BaseModel):
     name: str
     gender: Optional[str] = None
+    phone: Optional[str] = None
     emergency_name: Optional[str] = None
     emergency_phone: Optional[str] = None
     emergency_email: Optional[str] = None
@@ -478,6 +479,7 @@ class InfoSync(BaseModel):
     name: str
     dob: str
     gender: Optional[str] = None
+    phone: Optional[str] = None
     lat: float
     lng: float
     eName: str
@@ -2844,6 +2846,7 @@ def get_stats(uid: str = Depends(get_current_uid), db: Session = Depends(get_db)
     return {
         "name": user.name if (user and user.name) else "Muhammad Asad",
         "email": email_val,
+        "phone": user.phone if (user and user.phone) else "Not Set",
         "uid": uid,
         "total_sessions": count,
         "last_mood": last.mood if last else "neutral",
@@ -2887,6 +2890,7 @@ def sync_info(data: InfoSync, uid: str = Depends(get_current_uid), db: Session =
         logger.error(f"Failed to parse dob timestamp {data.dob}: {parse_e}")
         user.dob = None
     user.gender = data.gender
+    user.phone = data.phone
     user.lat = data.lat
     user.lng = data.lng
     user.emergency_name = data.eName
@@ -2903,6 +2907,8 @@ def update_profile(data: ProfileUpdate, uid: str = Depends(get_current_uid), db:
     user.name = data.name
     if data.gender:
         user.gender = data.gender
+    if data.phone is not None:
+        user.phone = data.phone
     if data.emergency_name is not None:
         user.emergency_name = data.emergency_name
     if data.emergency_phone is not None:
@@ -2941,6 +2947,7 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
                 "lng": data.lng
             },
             "session_id": data.session_id,
+            "user_phone": user.phone or "Not Set",
             "emergency_contact": {
                 "name": user.emergency_name or "",
                 "phone": user.emergency_phone or "",

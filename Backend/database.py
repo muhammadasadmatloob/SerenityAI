@@ -54,6 +54,7 @@ class User(Base):
     emergency_name = Column(String, nullable=True)
     emergency_phone = Column(String, nullable=True)
     emergency_email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
     path = Column(String, nullable=True)
 
 class UserSession(Base):
@@ -259,6 +260,13 @@ except Exception:
 try:
     with engine.connect() as conn:
         conn.execute(text("ALTER TABLE message_analyses ADD COLUMN urgency_score INTEGER DEFAULT 1"))
+        conn.commit()
+except Exception:
+    pass
+
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR"))
         conn.commit()
 except Exception:
     pass

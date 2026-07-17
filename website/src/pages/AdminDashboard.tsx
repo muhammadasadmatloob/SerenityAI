@@ -18,6 +18,7 @@ interface Alert {
   status: string;
   timestamp: any;
   session_id?: number;
+  user_phone?: string;
 }
 
 interface ChatMessage {
@@ -245,7 +246,11 @@ export default function AdminDashboard() {
 
   const handleSendWhatsApp = (alert: Alert) => {
     const phone = alert.emergency_contact.phone.replace(/[^0-9]/g, '');
-    const message = `URGENT: SerenityAI has detected a severe crisis for ${alert.username}. They may need immediate assistance.`;
+    const locationUrl = `https://maps.google.com/?q=${alert.location.lat},${alert.location.lng}`;
+    const userPhoneStr = alert.user_phone && alert.user_phone !== "Not Set" 
+      ? `\n\nVerify by calling/searching their number on WhatsApp: ${alert.user_phone}`
+      : "";
+    const message = `URGENT: SerenityAI has detected a severe crisis for your relative/friend, ${alert.username}. They may need immediate assistance.${userPhoneStr}\n\nHere is their last known live GPS location:\n${locationUrl}`;
     const waLink = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     window.open(waLink, '_blank');
   };
@@ -316,6 +321,9 @@ export default function AdminDashboard() {
                 </div>
                 <div className="p-5 flex-1 flex flex-col">
                   <h3 className="text-xl font-bold text-text-main mb-1">{alert.username}</h3>
+                  {alert.user_phone && alert.user_phone !== "Not Set" && (
+                    <p className="text-xs text-text-muted">Personal Phone: <span className="font-semibold text-text-main">{alert.user_phone}</span></p>
+                  )}
                   <div className="mt-4 space-y-3 flex-1">
                     <div className="bg-background rounded-xl p-3 border border-border">
                       <p className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Crisis Reason</p>

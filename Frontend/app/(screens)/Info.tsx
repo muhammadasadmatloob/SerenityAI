@@ -35,6 +35,7 @@ export default function InfoScreen() {
   const [address, setAddress] = useState("");
   const [eName, setEName] = useState("");
   const [ePhone, setEPhone] = useState("");
+  const [phone, setPhone] = useState("");
   const [eEmail, setEEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -126,8 +127,25 @@ export default function InfoScreen() {
   };
 
   const handleContinue = async () => {
-    if (!name || !gender || !eName || !ePhone || !location) {
-      Alert.alert("Almost there!", "We need just a little more info. Please fill in your name, date of birth, gender, location, and emergency contacts.");
+    if (!name || !gender || !phone || !eName || !ePhone || !location) {
+      Alert.alert("Almost there!", "We need just a little more info. Please fill in your name, date of birth, gender, location, your phone number, and emergency contacts.");
+      return;
+    }
+
+    const phoneRegex = /^\+\d{10,15}$/;
+
+    if (!phone.startsWith("+")) {
+      Alert.alert("Gentle Reminder", "Please start your personal phone number with a '+' and your country code.");
+      return;
+    }
+
+    if (phone.startsWith("+92") && phone.length !== 13) {
+      Alert.alert("Gentle Reminder", "Pakistani personal numbers (+92) must have exactly 10 digits after the country code (e.g. +923331234567).");
+      return;
+    }
+
+    if (!phoneRegex.test(phone)) {
+      Alert.alert("Gentle Reminder", "Please enter a valid personal phone number with your country code.");
       return;
     }
 
@@ -137,13 +155,12 @@ export default function InfoScreen() {
     }
 
     if (ePhone.startsWith("+92") && ePhone.length !== 13) {
-      Alert.alert("Gentle Reminder", "Pakistani numbers (+92) must have exactly 10 digits after the country code (e.g. +923331234567).");
+      Alert.alert("Gentle Reminder", "Pakistani emergency numbers (+92) must have exactly 10 digits after the country code (e.g. +923331234567).");
       return;
     }
 
-    const phoneRegex = /^\+\d{10,15}$/;
     if (!phoneRegex.test(ePhone)) {
-      Alert.alert("Gentle Reminder", "Please enter a valid phone number with your country code and digits.");
+      Alert.alert("Gentle Reminder", "Please enter a valid emergency phone number with your country code.");
       return;
     }
 
@@ -169,6 +186,7 @@ export default function InfoScreen() {
           name: name,
           dob: birthDate.toISOString(),
           gender: gender,
+          phone: phone,
           lat: location.latitude,
           lng: location.longitude,
           eName: eName,
@@ -185,6 +203,7 @@ export default function InfoScreen() {
       await saveUserInfo(
         user.uid,
         name,
+        phone,
         birthDate,
         gender,
         { latitude: location.latitude, longitude: location.longitude },
@@ -375,8 +394,27 @@ export default function InfoScreen() {
                 </View>
               )}
 
+              {/* Personal Phone Field */}
+              <Text className="font-bold text-gray-700 ml-1 mb-2">5. Your Personal Phone Number</Text>
+              <View className="bg-white p-6 rounded-[35px] border border-[#E2E8F0] mb-6">
+                <View className="bg-[#808CEA]/5 p-4 rounded-xl mb-4 border border-[#808CEA]/10">
+                  <Text className="text-xs text-gray-700 font-medium leading-relaxed">
+                    Please enter the phone number you actively use and have on WhatsApp. Ensure this is a number that your family and friends know, so they can easily recognize it when we reach out to them in an emergency.
+                  </Text>
+                </View>
+                <TextInput
+                  placeholder="Your WhatsApp Number (e.g. +923331234567)"
+                  placeholderTextColor="#9CA3AF"
+                  className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800"
+                  keyboardType="phone-pad"
+                  value={phone}
+                  onChangeText={setPhone}
+                  style={{ fontSize: 15, color: "#1F2937" }}
+                />
+              </View>
+
               {/* Emergency Contact Field */}
-              <Text className="font-bold text-gray-700 ml-1 mb-2">5. Emergency Contact Details</Text>
+              <Text className="font-bold text-gray-700 ml-1 mb-2">6. Emergency Contact Details</Text>
               <View 
                 className="bg-white p-6 rounded-[35px] border border-[#E2E8F0] mb-6"
                 onLayout={(e) => { emergencyY = e.nativeEvent.layout.y; }}

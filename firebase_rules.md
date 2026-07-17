@@ -17,7 +17,7 @@ service cloud.firestore {
 
     // Fields your app is allowed to write to /users/{userId}
     function allowedUserFields() {
-      return ['uid', 'name', 'birthDate', 'gender', 'location', 'emergencyContact',
+      return ['uid', 'name', 'phone', 'birthDate', 'gender', 'location', 'emergencyContact',
               'email', 'isOnboardingComplete', 'updatedAt', 'path'];
     }
 

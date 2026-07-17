@@ -2616,6 +2616,31 @@ async def chat_voice(
                 "audio_url": None
             }
         }
+# Admin Secure Endpoint
+def get_admin_uid(authorization: Optional[str] = Header(None)):
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Invalid Token")
+    try:
+        token = authorization.split(" ")[1]
+        decoded_token = auth.verify_id_token(token)
+        if decoded_token.get("email") != "donnaserenity25@gmail.com":
+            raise HTTPException(status_code=403, detail="Forbidden: Admin access only")
+        return decoded_token["uid"]
+    except Exception as e:
+        logger.error(f"Admin auth error: {e}")
+        raise HTTPException(status_code=401, detail="Invalid Token")
+
+@app.get("/api/admin/chat/history/{session_id}")
+def admin_get_chat_history(session_id: int, admin_uid: str = Depends(get_admin_uid), db: Session = Depends(get_db)):
+    msgs = db.query(Message).filter_by(session_id=session_id).order_by(Message.timestamp.asc()).all()
+    return [{"id": m.id, "text": decrypt(m.content), "sender": "user" if m.role == "user" else "ai", "audio_url": m.audio_url, "timestamp": m.timestamp.isoformat()} for m in msgs]
+
+@app.get("/api/admin/session/status/{session_id}")
+def admin_get_session_status(session_id: int, admin_uid: str = Depends(get_admin_uid), db: Session = Depends(get_db)):
+    sess = db.query(UserSession).filter_by(id=session_id).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"status": sess.status, "duration": sess.duration_seconds}
 
 @app.get("/api/chat/history/{session_id}")
 def get_chat_history(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
@@ -2862,6 +2887,7 @@ class EmergencyTrigger(BaseModel):
     lat: float
     lng: float
     reason: Optional[str] = "Severe mental health crisis detected during chat session"
+    session_id: Optional[int] = None
 
 @app.post("/api/emergency/trigger")
 def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
@@ -2885,6 +2911,7 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
                 "lat": data.lat,
                 "lng": data.lng
             },
+            "session_id": data.session_id,
             "emergency_contact": {
                 "name": user.emergency_name or "",
                 "phone": user.emergency_phone or "",

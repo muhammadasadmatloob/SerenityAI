@@ -753,7 +753,7 @@ export default function ChatScreen() {
       const res = await fetch(`${BACKEND_URL}/api/emergency/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
+        body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude, session_id: Number(activeId) }),
       });
       const data = await res.json();
       // Silently handle the response so the user is unaware

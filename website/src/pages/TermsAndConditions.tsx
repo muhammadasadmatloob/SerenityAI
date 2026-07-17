@@ -55,7 +55,7 @@ export default function TermsAndConditions() {
               2. Emergency Contact Authorization
             </h2>
             <p className="leading-relaxed">
-              By providing an emergency contact during onboarding, you explicitly authorize Serenity AI to automatically send an SMS, email, or WhatsApp message containing your live GPS coordinates to that contact if our NLP engines detect language highly indicative of an immediate threat to your life or safety.
+              By providing an emergency contact during onboarding, you explicitly authorize Serenity AI to automatically send a WhatsApp message containing your live GPS coordinates to that contact if our NLP engines detect language highly indicative of an immediate threat to your life or safety.
             </p>
           </section>
           

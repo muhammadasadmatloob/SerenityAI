@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
-import { LogOut, AlertTriangle, MapPin, Mail, Phone, CheckCircle } from 'lucide-react';
+import { LogOut, AlertTriangle, MapPin, Phone, CheckCircle } from 'lucide-react';
 
 const ADMIN_EMAIL = 'donnaserenity25@gmail.com';
 
@@ -80,13 +80,6 @@ export default function AdminDashboard() {
   const constructMessage = (alert: Alert) => {
     const mapsLink = `https://maps.google.com/?q=${alert.location.lat},${alert.location.lng}`;
     return `DO NOT REPLY. Your relative/friend ${alert.username || 'the user'} is in danger. Be at their location to save them so they can get aid in time.\n\nCrisis Reason: ${alert.reason}\nLive Location: ${mapsLink}\n\nDonna from Serenity AI.`;
-  };
-
-  const handleSendEmail = (alert: Alert) => {
-    const message = constructMessage(alert);
-    const subject = `URGENT: Emergency Alert for ${alert.username || 'User'}`;
-    const mailtoLink = `mailto:${alert.emergency_contact.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-    window.location.href = mailtoLink;
   };
 
   const handleSendWhatsApp = (alert: Alert) => {
@@ -199,18 +192,7 @@ export default function AdminDashboard() {
                         Send WhatsApp ({alert.emergency_contact.phone || 'N/A'})
                       </button>
 
-                      <button
-                        onClick={() => handleSendEmail(alert)}
-                        disabled={!alert.emergency_contact.email}
-                        className={`w-full flex items-center justify-center py-2.5 rounded-xl font-semibold transition-all ${
-                          alert.emergency_contact.email 
-                            ? 'bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white border border-blue-500/20' 
-                            : 'bg-background text-text-muted border border-border cursor-not-allowed'
-                        }`}
-                      >
-                        <Mail size={18} className="mr-2" />
-                        Send Email ({alert.emergency_contact.email || 'N/A'})
-                      </button>
+                      {/* Send Email button removed as requested */}
                     </div>
 
                     <button

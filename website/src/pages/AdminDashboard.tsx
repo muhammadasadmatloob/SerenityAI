@@ -39,7 +39,8 @@ export default function AdminDashboard() {
   const [sendingIntervention, setSendingIntervention] = useState(false);
   
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [sessionActive, setSessionActive] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [sessionActive, setSessionActive] = useState<boolean>(true);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
@@ -109,6 +110,11 @@ export default function AdminDashboard() {
         if (historyRes.ok && isMounted) {
           const historyData = await historyRes.json();
           setChatHistory(historyData);
+          setHistoryError(null);
+        } else if (!historyRes.ok && isMounted) {
+          const errText = await historyRes.text();
+          console.error("Failed to load history", errText);
+          setHistoryError(`Server returned: ${historyRes.status} ${errText}`);
         }
 
         // Fetch session status
@@ -124,8 +130,9 @@ export default function AdminDashboard() {
             setSessionActive(true);
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to poll chat history:", err);
+        if (isMounted) setHistoryError(`Network/Fetch Error: ${err.message}`);
       } finally {
         if (isMounted) setIsSyncingSession(false);
       }
@@ -331,9 +338,14 @@ export default function AdminDashboard() {
                   <Loader2 size={32} className="animate-spin mb-4 text-accent/50" />
                   <p>Syncing live session data...</p>
                 </div>
+              ) : historyError ? (
+                <div className="h-full flex items-center justify-center text-red-500 p-4 text-center">
+                  <AlertTriangle className="w-5 h-5 mr-2" />
+                  Error loading chat history: {historyError}
+                </div>
               ) : allMessages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-text-muted">
-                  <p>No messages in this session yet.</p>
+                <div className="h-full flex items-center justify-center text-gray-500">
+                  No messages in this session yet.
                 </div>
               ) : (
                 allMessages.map((msg, idx) => {

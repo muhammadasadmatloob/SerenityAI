@@ -93,6 +93,11 @@ export default function ProfileInfoScreen() {
 
     const phoneRegex = /^\+\d{10,15}$/;
 
+    if (data.phone === data.ePhone) {
+        Alert.alert("Gentle Reminder", "Your personal phone number must be different from your emergency contact's phone number.");
+        return;
+    }
+
     if (!data.phone.startsWith("+")) {
         Alert.alert("Gentle Reminder", "Please start your personal phone number with a '+' and your country code.");
         return;

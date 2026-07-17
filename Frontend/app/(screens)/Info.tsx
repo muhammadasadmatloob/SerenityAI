@@ -134,6 +134,11 @@ export default function InfoScreen() {
 
     const phoneRegex = /^\+\d{10,15}$/;
 
+    if (phone === ePhone) {
+      Alert.alert("Gentle Reminder", "Your personal phone number must be different from your emergency contact's phone number.");
+      return;
+    }
+
     if (!phone.startsWith("+")) {
       Alert.alert("Gentle Reminder", "Please start your personal phone number with a '+' and your country code.");
       return;

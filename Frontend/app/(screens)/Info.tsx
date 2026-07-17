@@ -161,7 +161,32 @@ export default function InfoScreen() {
     try {
       setLoading(true);
 
-      // Step 1: Save to Firestore first (this controls onboarding navigation)
+      // Step 1: Sync to backend FIRST. If we save to Firestore first, _layout.tsx will instantly 
+      // detect the change and navigate away, which kills this network request before it finishes.
+      const token = await user.getIdToken();
+      const res = await fetch(`${BACKEND_URL}/api/info`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: name,
+          dob: birthDate.toISOString(),
+          gender: gender,
+          lat: location.latitude,
+          lng: location.longitude,
+          eName: eName,
+          ePhone: ePhone,
+          eEmail: eEmail,
+        }),
+      });
+
+      if (!res.ok) {
+        console.log("Backend sync failed with status:", res.status);
+      }
+
+      // Step 2: Save to Firestore (this controls onboarding navigation via _layout.tsx onSnapshot)
       await saveUserInfo(
         user.uid,
         name,
@@ -171,30 +196,6 @@ export default function InfoScreen() {
         { name: eName, phone: ePhone, email: eEmail }
       );
 
-      // Step 2: Let _layout.tsx handle the transition to Welcome screen via onSnapshot to prevent double routing
-      // const router = require("expo-router").router;
-      // router.replace({ pathname: "/(screens)/Welcome", params: { mode: "signup" } });
-
-      // Step 3: Sync to backend in background (fire and forget)
-      user.getIdToken().then(token => {
-        fetch(`${BACKEND_URL}/api/info`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            name: name,
-            dob: birthDate.toISOString(),
-            gender: gender,
-            lat: location.latitude,
-            lng: location.longitude,
-            eName: eName,
-            ePhone: ePhone,
-            eEmail: eEmail,
-          }),
-        }).catch(err => console.log("Backend sync failed:", err));
-      }).catch(err => console.log("Failed to get token for sync:", err));
     } catch (err: any) {
       Alert.alert("Oops", "We couldn't quite save your profile this time. Please try again in a moment.");
     } finally {

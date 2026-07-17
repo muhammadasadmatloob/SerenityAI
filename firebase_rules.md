@@ -46,7 +46,7 @@ service cloud.firestore {
     // --- 👇 ADMIN OVERRIDES RULE 👇 ---
     // Includes session ID segregation so previous crisis sessions aren't mixed
     match /admin_overrides/{userId}/sessions/{sessionId}/messages/{msgId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwner(userId) || isSignedIn();
       // In a production app, we would restrict writes here to an admin role or custom claim.
       // For now, any signed in user can write (used by Admin Dashboard running locally).
       allow write: if isSignedIn(); 

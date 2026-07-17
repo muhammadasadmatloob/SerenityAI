@@ -599,23 +599,21 @@ export default function ChatScreen() {
     
     const q = query(
       collection(db, `admin_overrides/${user.uid}/sessions/${activeId}/messages`),
-      orderBy("timestamp", "desc"),
-      limit(1)
+      orderBy("timestamp", "asc")
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === "added") {
           const data = change.doc.data();
-          const msgTime = data.timestamp?.toDate();
           
-          // Only process if the message is newer than when we mounted
-          if (msgTime && msgTime > mountTime) {
-            console.log("Received Admin Override!");
-            const overrideId = `admin_${change.doc.id}`;
-            
-            // Auto-play audio if included
-            setHistory((prev) => [
+          console.log("Received Admin Override!");
+          const overrideId = `admin_${change.doc.id}`;
+          
+          // Auto-play audio if included, but prevent duplicates
+          setHistory((prev) => {
+            if (prev.some(m => m.id === overrideId)) return prev;
+            return [
               ...prev, 
               { 
                 id: overrideId, 
@@ -624,11 +622,11 @@ export default function ChatScreen() {
                 audio_url: data.audio_url || null,
                 shouldAutoplay: !!data.audio_url 
               }
-            ]);
-            
-            if (!data.audio_url) {
-              playSoundEffect("receive");
-            }
+            ];
+          });
+          
+          if (!data.audio_url) {
+            playSoundEffect("receive");
           }
         }
       });

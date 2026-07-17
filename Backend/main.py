@@ -2861,6 +2861,7 @@ def update_profile(data: ProfileUpdate, uid: str = Depends(get_current_uid), db:
 class EmergencyTrigger(BaseModel):
     lat: float
     lng: float
+    reason: Optional[str] = "Severe mental health crisis detected during chat session"
 
 @app.post("/api/emergency/trigger")
 def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
@@ -2868,84 +2869,36 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
-    if not user.emergency_phone:
+    if not user.emergency_phone and not user.emergency_email:
         logger.warning(f"Crisis triggered for user {uid}, but no emergency contact is set!")
         return {"status": "no_contact_set"}
 
-    maps_link = f"https://maps.google.com/?q={data.lat},{data.lng}"
-    message_body = (
-        f"🚨 URGENT from Donna AI 🚨\n\n"
-        f"Your friend/relative {user.name or 'the user'} is in a severe mental health crisis and may be in danger. "
-        f"Please reach out to them or send help immediately. Here is their current live location:\n{maps_link}"
-    )
-
-    logger.error("="*50)
-    logger.error("CRISIS EMERGENCY TRIGGERED!")
-    logger.error(f"Target Contact: {user.emergency_name} ({user.emergency_phone})")
-    logger.error(f"Message: {message_body}")
-    logger.error("="*50)
-
-    # TODO: Integration with Twilio for actual SMS
-    twilio_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    twilio_token = os.getenv("TWILIO_AUTH_TOKEN")
-    twilio_number = os.getenv("TWILIO_PHONE_NUMBER")
-    
-    twilio_status = "Twilio credentials missing"
-    if twilio_sid and twilio_token and twilio_number:
-        try:
-            from twilio.rest import Client
-            client = Client(twilio_sid, twilio_token)
-            
-            # WhatsApp requires the 'whatsapp:' prefix for both sender and recipient
-            sender = f"whatsapp:{twilio_number}"
-            receiver = f"whatsapp:{user.emergency_phone}"
-            
-            client.messages.create(
-                body=message_body,
-                from_=sender,
-                to=receiver
-            )
-            logger.info(f"Emergency WHATSAPP dispatched via Twilio to {receiver}.")
-            twilio_status = "alert_dispatched"
-        except Exception as e:
-            logger.error(f"Failed to send Twilio WhatsApp message: {e}")
-            twilio_status = f"Twilio Error: {str(e)}"
-    else:
-        logger.warning("Twilio credentials not found in .env. Emergency alert was logged but NOT sent via WhatsApp.")
-
-    # --- EMAIL FALLBACK/ADDITION ---
-    email_status = "Email credentials missing"
-    email_user = os.getenv("EMAIL_USER")
-    email_pass = os.getenv("EMAIL_PASSWORD")
-    
-    if email_user and email_pass:
-        try:
-            import smtplib
-            from email.mime.text import MIMEText
-            
-            # Send to the user's configured emergency email
-            target_email = user.emergency_email if user.emergency_email else "donnaserenity25@gmail.com"
-            
-            msg = MIMEText(message_body)
-            msg['Subject'] = f"🚨 URGENT: SerenityAI Emergency Alert for {user.name or 'User'}"
-            msg['From'] = email_user
-            msg['To'] = target_email
-            
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-                server.login(email_user, email_pass)
-                server.send_message(msg)
-                
-            logger.info(f"Emergency EMAIL dispatched to {target_email}.")
-            email_status = "email_dispatched"
-        except Exception as e:
-            logger.error(f"Failed to send Emergency Email: {e}")
-            email_status = f"Email Error: {str(e)}"
-
-    # If either succeeded, we tell the frontend it was dispatched
-    if twilio_status == "alert_dispatched" or email_status == "email_dispatched":
-        return {"status": "alert_dispatched"}
-    
-    return {"status": f"Twilio: {twilio_status} | Email: {email_status}"}
+    try:
+        from firebase_admin import firestore
+        db_firestore = firestore.client()
+        
+        alert_data = {
+            "uid": user.firebase_uid,
+            "username": user.name or "Unknown User",
+            "reason": data.reason,
+            "location": {
+                "lat": data.lat,
+                "lng": data.lng
+            },
+            "emergency_contact": {
+                "name": user.emergency_name or "",
+                "phone": user.emergency_phone or "",
+                "email": user.emergency_email or ""
+            },
+            "status": "pending",
+            "timestamp": firestore.SERVER_TIMESTAMP
+        }
+        
+        db_firestore.collection("crisis_alerts").add(alert_data)
+        return {"status": "alert_dispatched", "message": "Crisis alert sent to admin dashboard."}
+    except Exception as e:
+        logger.error(f"Failed to save crisis alert to Firestore: {e}")
+        raise HTTPException(status_code=500, detail="Failed to log crisis alert")
 
 # --- GOALS API ---
 

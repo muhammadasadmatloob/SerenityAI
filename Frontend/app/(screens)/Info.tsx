@@ -387,7 +387,10 @@ export default function InfoScreen() {
               >
                 <View className="bg-[#808CEA]/5 p-4 rounded-xl mb-4 border border-[#808CEA]/10">
                   <Text className="text-xs text-gray-700 font-medium leading-relaxed">
-                    <Text className="font-bold text-[#4A55A2]">Important:</Text> Please add the number of a trusted friend, family member, or your real human therapist. As an AI, Donna cannot physically intervene in a crisis, so this contact will be alerted with your live location if severe distress is detected.
+                    <Text className="font-bold text-[#4A55A2]">Important:</Text> Please add the number of a trusted friend, family member, or your real human therapist. As an AI, Donna cannot physically intervene in a crisis, so this contact will be alerted with your live location if severe distress is detected. 
+                  </Text>
+                  <Text className="text-xs text-gray-700 font-bold leading-relaxed mt-2 text-[#4A55A2]">
+                    Note: The emergency phone number must be available on WhatsApp, and the email must be actively working.
                   </Text>
                 </View>
                 <TextInput
@@ -399,7 +402,7 @@ export default function InfoScreen() {
                   style={{ fontSize: 15, color: "#1F2937" }}
                 />
                 <TextInput
-                  placeholder="Phone number (e.g. +923331234567)"
+                  placeholder="WhatsApp Number (e.g. +923331234567)"
                   placeholderTextColor="#9CA3AF"
                   className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800 mb-3"
                   keyboardType="phone-pad"

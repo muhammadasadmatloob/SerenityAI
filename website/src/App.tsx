@@ -7,9 +7,23 @@ import Footer from './components/Footer';
 import TermsAndConditions from './pages/TermsAndConditions';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 
+import { User } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
 function LandingPage() {
   return (
-    <div className="w-full min-h-screen">
+    <div className="w-full min-h-screen relative">
+      {/* Admin Login Icon */}
+      <div className="absolute top-6 right-6 z-50">
+        <Link 
+          to="/admin" 
+          className="w-10 h-10 bg-surface/80 backdrop-blur-md border border-border rounded-full flex items-center justify-center text-text-muted hover:text-accent hover:border-accent transition-colors shadow-sm"
+          title="Admin Login"
+        >
+          <User size={20} />
+        </Link>
+      </div>
+
       <Hero3D />
       <Features />
       <DownloadApp />
@@ -17,6 +31,9 @@ function LandingPage() {
     </div>
   );
 }
+
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
   return (
@@ -32,6 +49,8 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/terms" element={<TermsAndConditions />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/admin" element={<AdminLogin />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
         </Routes>
       </Router>
     </HelmetProvider>

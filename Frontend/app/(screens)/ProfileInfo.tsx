@@ -270,6 +270,9 @@ export default function ProfileInfoScreen() {
                 <Text className="text-xs text-gray-700 font-medium leading-relaxed">
                   <Text className="font-bold text-[#4A55A2]">Important:</Text> Please add the number of a trusted friend, family member, or your real human therapist. As an AI, Donna cannot physically intervene in a crisis, so this contact will be alerted with your live location if severe distress is detected.
                 </Text>
+                <Text className="text-xs text-gray-700 font-bold leading-relaxed mt-2 text-[#4A55A2]">
+                  Note: The emergency phone number must be available on WhatsApp, and the email must be actively working.
+                </Text>
               </View>
               <TextInput 
                   placeholder="Contact Person Name" 
@@ -278,7 +281,7 @@ export default function ProfileInfoScreen() {
                   className="bg-white p-4 rounded-2xl mb-4 border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
               />
               <TextInput 
-                  placeholder="Emergency Phone (e.g. +923331234567)" 
+                  placeholder="WhatsApp Number (e.g. +923331234567)" 
                   value={data.ePhone} 
                   onChangeText={(t) => setData({...data, ePhone: t})} 
                   keyboardType="phone-pad" 

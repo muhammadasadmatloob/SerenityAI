@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { HelmetProvider, Helmet } from 'react-helmet-async';
 import Hero3D from './components/Hero3D';
 import Features from './components/Features';
+import AppShowcase from './components/AppShowcase';
+import Workflow from './components/Workflow';
 import DownloadApp from './components/DownloadApp';
 import Footer from './components/Footer';
 import TermsAndConditions from './pages/TermsAndConditions';
@@ -25,6 +27,8 @@ function LandingPage() {
       </div>
 
       <Hero3D />
+      <AppShowcase />
+      <Workflow />
       <Features />
       <DownloadApp />
       <Footer />

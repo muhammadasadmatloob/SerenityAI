@@ -110,11 +110,12 @@ export default function Hero3D() {
             Your 24/7 empathetic companion. Experience professional emotional support, voice conversations, and mood tracking—all in a beautifully simple interface.
           </p>
           
-          <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-            <a href="#download" className="w-full sm:w-auto px-8 py-3.5 text-base font-semibold text-background bg-text-main rounded-full hover:bg-gray-200 transition-colors shadow-sm text-center">
+          <div className="flex flex-col sm:flex-row gap-5 w-full sm:w-auto">
+            <a href="#download" className="group relative w-full sm:w-auto px-8 py-4 text-base font-semibold text-background bg-text-main rounded-full hover:scale-105 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.3)] text-center overflow-hidden">
+              <div className="absolute inset-0 bg-white/20 blur-md translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 pointer-events-none" />
               Download App
             </a>
-            <a href="#features" className="w-full sm:w-auto px-8 py-3.5 text-base font-medium text-text-main bg-surface/50 backdrop-blur-sm border border-border rounded-full hover:bg-surface-hover transition-colors text-center">
+            <a href="#features" className="w-full sm:w-auto px-8 py-4 text-base font-medium text-text-main bg-surface/30 backdrop-blur-xl border border-white/10 rounded-full hover:bg-white/10 transition-all text-center">
               Explore Features
             </a>
           </div>
@@ -122,13 +123,14 @@ export default function Hero3D() {
 
         {/* Right Column: Raw App Screenshot */}
         <motion.div 
-          initial={{ opacity: 0, x: 30 }}
-          animate={{ opacity: 1, x: 0 }}
+          initial={{ opacity: 0, scale: 0.9, x: 30 }}
+          animate={{ opacity: 1, scale: 1, x: 0 }}
           transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
           className="flex-1 w-full flex justify-center lg:justify-end relative"
         >
           {/* Glowing Aura Matching Theme */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100%] h-[110%] bg-accent/20 blur-[120px] rounded-full pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[130%] bg-accent/30 blur-[140px] rounded-full pointer-events-none mix-blend-screen" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[90%] bg-blue-500/20 blur-[80px] rounded-full pointer-events-none" />
           
           <img 
             src="/app_screenshot.png" 

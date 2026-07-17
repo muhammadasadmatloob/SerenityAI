@@ -54,3 +54,7 @@ Backend/prompt_debug.txt
 Backend/static/qdrant_db/
 Backend/static/qdrant_test_db/
 
+# Temporary Office lock files
+**/~$*
+
+

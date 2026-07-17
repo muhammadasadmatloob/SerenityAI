@@ -1,0 +1,87 @@
+graph TD
+    %% Styling and Theme
+    classDef client fill:#1E293B,stroke:#0EA5E9,stroke-width:2px,color:#F8FAFC;
+    classDef backend fill:#1E293B,stroke:#8B5CF6,stroke-width:2px,color:#F8FAFC;
+    classDef ai fill:#1E293B,stroke:#10B981,stroke-width:2px,color:#F8FAFC;
+    classDef db fill:#1E293B,stroke:#F59E0B,stroke-width:2px,color:#F8FAFC;
+    classDef crisis fill:#7F1D1D,stroke:#EF4444,stroke-width:2px,color:#FEE2E2;
+
+    %% Nodes Definitions
+    subgraph Client ["📱 Client Tier (React Native / Expo)"]
+        UserApp["Mobile Application User Interface"]:::client
+        AudioRec["Voice Recorder (Audio Input)"]:::client
+        AudioPlayer["TTS Player (Audio Output)"]:::client
+    end
+
+    subgraph API ["⚡ FastAPI Backend Layer"]
+        Router["FastAPI Router Gateway"]:::backend
+        AuthValidate["Firebase Auth & Token Validator"]:::backend
+        SessionMgr["Session Lifecycle Manager"]:::backend
+        ChatEngine["Chat & Core Processing Orchestrator"]:::backend
+        SpeechEngine["Speech Processor (Whisper & Edge-TTS)"]:::backend
+        EmergencySvc["Emergency Alert System (Twilio & Email)"]:::backend
+    end
+
+    subgraph AI_Core ["🧠 Cognitive & AI Core"]
+        LLMChat["Groq / Gemini LLM (Therapeutic Response)"]:::ai
+        EmotionAnalyzer["Emotion & Risk Analyzer"]:::ai
+        SemanticMem["Semantic Vector Memory Matcher"]:::ai
+    end
+
+    subgraph Storage ["💾 Storage & Data Tier"]
+        PostgresDB[("PostgreSQL Database<br>(SQLAlchemy ORM)")]:::db
+        UserTable[("users")]:::db
+        SessionTable[("sessions")]:::db
+        MsgTable[("messages")]:::db
+        AnalysisTable[("message_analyses")]:::db
+        CrisisTable[("crisis_events")]:::db
+        GoalTable[("user_goals")]:::db
+        PlanTable[("treatment_plans")]:::db
+    end
+
+    %% Workflow Connections
+    
+    %% User authentication & Session creation
+    UserApp -->|1. Authenticate / Setup Profile| Router
+    Router --> AuthValidate
+    AuthValidate -->|Validate UID| UserTable
+    
+    UserApp -->|2. Start Session| Router
+    Router --> SessionMgr
+    SessionMgr -->|Initialize Session Record| SessionTable
+
+    %% Message Flow (Voice and Text)
+    UserApp -->|3a. Send Text Message| Router
+    AudioRec -->|3b. Send Voice Message (.wav/.mp3)| Router
+    
+    Router -->|If Text| ChatEngine
+    Router -->|If Voice| SpeechEngine
+    SpeechEngine -->|Transcribe (Speech-To-Text)| ChatEngine
+    
+    %% Core chat processing
+    ChatEngine -->|Retrieve User Context & Memories| SemanticMem
+    SemanticMem -->|Semantic Query| PostgresDB
+    
+    ChatEngine -->|Analyze Message Sentiment & Risk| EmotionAnalyzer
+    EmotionAnalyzer -->|Analyze Emotion & Risk Level| LLMChat
+    EmotionAnalyzer -->|Save Metrics| AnalysisTable
+    
+    %% Crisis Detection Routing
+    EmotionAnalyzer -->|Risk Level == High| EmergencySvc
+    EmergencySvc -->|Trigger Crisis Protocol & Log Event| CrisisTable:::crisis
+    EmergencySvc -->|Send Alert to Emergency Contact| ContactPhone["Emergency Contact Email/Phone"]:::crisis
+    
+    %% Response Synthesis
+    LLMChat -->|Synthesize Response Strategy| ChatEngine
+    ChatEngine -->|Save Assistant Message| MsgTable
+    
+    ChatEngine -->|If Voice Session: Generate Audio| SpeechEngine
+    SpeechEngine -->|Synthesize Audio (TTS)| AudioPlayer
+    ChatEngine -->|Return Text Response| UserApp
+    
+    %% Session ending
+    UserApp -->|4. End Session| Router
+    Router --> SessionMgr
+    SessionMgr -->|Calculate Metrics, Summarize & Generate Reflections| SessionTable
+    SessionMgr -->|Save Goal Updates| GoalTable
+    SessionMgr -->|Save Treatment Milestone Progress| PlanTable

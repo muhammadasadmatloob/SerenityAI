@@ -28,10 +28,14 @@ export default function AdminDashboard() {
   const [interventionText, setInterventionText] = useState('');
   const [sendingIntervention, setSendingIntervention] = useState(false);
 
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (!user || user.email !== ADMIN_EMAIL) {
         navigate('/admin');
+      } else {
+        setIsAdminAuthenticated(true);
       }
     });
 
@@ -39,6 +43,8 @@ export default function AdminDashboard() {
   }, [navigate]);
 
   useEffect(() => {
+    if (!isAdminAuthenticated) return;
+
     const q = query(
       collection(db, 'crisis_alerts'),
       where('status', '==', 'pending')
@@ -63,7 +69,7 @@ export default function AdminDashboard() {
     });
 
     return () => unsubscribeDB();
-  }, []);
+  }, [isAdminAuthenticated]);
 
   const handleLogout = async () => {
     await signOut(auth);

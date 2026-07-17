@@ -85,9 +85,13 @@ export default function AdminDashboard() {
     return () => unsubscribeDB();
   }, [isAdminAuthenticated]);
 
+  const [isSyncingSession, setIsSyncingSession] = useState(true);
+
   // Chat Polling Effect
   useEffect(() => {
     if (!activeIntervention?.session_id) return;
+    
+    setIsSyncingSession(true);
     
     let isMounted = true;
     let pollInterval: ReturnType<typeof setInterval>;
@@ -122,6 +126,8 @@ export default function AdminDashboard() {
         }
       } catch (err) {
         console.error("Failed to poll chat history:", err);
+      } finally {
+        if (isMounted) setIsSyncingSession(false);
       }
     };
 
@@ -320,10 +326,14 @@ export default function AdminDashboard() {
             
             {/* Chat History View */}
             <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-6 space-y-4 bg-background">
-              {allMessages.length === 0 ? (
+              {isSyncingSession ? (
                 <div className="h-full flex flex-col items-center justify-center text-text-muted">
                   <Loader2 size={32} className="animate-spin mb-4 text-accent/50" />
                   <p>Syncing live session data...</p>
+                </div>
+              ) : allMessages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-text-muted">
+                  <p>No messages in this session yet.</p>
                 </div>
               ) : (
                 allMessages.map((msg, idx) => {

@@ -2,9 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth, db, storage } from '../firebase';
-import { LogOut, AlertTriangle, MapPin, Phone, CheckCircle, ShieldAlert, Mic, MicOff, Send, X, Loader2 } from 'lucide-react';
+import { auth, db } from '../firebase';
+import { LogOut, AlertTriangle, MapPin, Phone, CheckCircle, ShieldAlert, Send, X, Loader2 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'donnaserenity25@gmail.com';
 
@@ -27,10 +26,7 @@ export default function AdminDashboard() {
   // Intervention State
   const [activeIntervention, setActiveIntervention] = useState<Alert | null>(null);
   const [interventionText, setInterventionText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
   const [sendingIntervention, setSendingIntervention] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
@@ -118,61 +114,6 @@ export default function AdminDashboard() {
       alert("Failed to send text intervention.");
     } finally {
       setSendingIntervention(false);
-    }
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        if (!activeIntervention) return;
-        setSendingIntervention(true);
-        try {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-          const audioRef = ref(storage, `admin_overrides/${activeIntervention.uid}/${Date.now()}.webm`);
-          await uploadBytes(audioRef, audioBlob);
-          const audioUrl = await getDownloadURL(audioRef);
-          
-          await addDoc(collection(db, `admin_overrides/${activeIntervention.uid}/messages`), {
-            text: '',
-            audio_url: audioUrl,
-            timestamp: serverTimestamp(),
-            sender: 'ai',
-          });
-          
-          setActiveIntervention(null);
-          alert("Voice intervention sent successfully!");
-        } catch (error) {
-          console.error("Error sending voice override:", error);
-          alert("Failed to send voice override.");
-        } finally {
-          setSendingIntervention(false);
-          mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
-        }
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      alert("Microphone access denied or not available. Please allow microphone permissions in your browser.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
     }
   };
 
@@ -318,7 +259,7 @@ export default function AdminDashboard() {
             <div className="p-6">
               <p className="text-sm text-text-muted mb-4">
                 You are about to intervene as <strong>Donna</strong> for <strong>{activeIntervention.username}</strong>. 
-                Any message sent here will instantly override the AI and appear on their screen.
+                Any text message sent here will instantly override the AI and appear on their screen.
               </p>
               
               <div className="mb-4">
@@ -328,59 +269,17 @@ export default function AdminDashboard() {
                   onChange={(e) => setInterventionText(e.target.value)}
                   placeholder="Type a calming message..."
                   className="w-full bg-background border border-border rounded-xl p-3 text-text-main focus:outline-none focus:border-accent resize-none h-24"
-                  disabled={sendingIntervention || isRecording}
+                  disabled={sendingIntervention}
                 />
                 <div className="flex justify-end mt-2">
                   <button
                     onClick={handleSendTextIntervention}
-                    disabled={sendingIntervention || isRecording || !interventionText.trim()}
+                    disabled={sendingIntervention || !interventionText.trim()}
                     className="bg-accent/20 text-accent hover:bg-accent hover:text-white px-4 py-2 rounded-lg font-semibold transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {sendingIntervention && !isRecording ? <Loader2 size={16} className="animate-spin mr-2" /> : <Send size={16} className="mr-2" />}
+                    {sendingIntervention ? <Loader2 size={16} className="animate-spin mr-2" /> : <Send size={16} className="mr-2" />}
                     Send Text
                   </button>
-                </div>
-              </div>
-
-              <div className="border-t border-border border-dashed pt-4">
-                <label className="block text-xs font-bold text-text-muted uppercase mb-2">Or Send Voice Note</label>
-                <div className="flex items-center justify-between bg-background border border-border rounded-xl p-4">
-                  <div className="flex items-center">
-                    {isRecording ? (
-                      <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center mr-3 animate-pulse">
-                        <div className="w-3 h-3 bg-red-500 rounded-full" />
-                      </div>
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center mr-3">
-                        <Mic size={20} className="text-accent" />
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-sm font-semibold text-text-main">
-                        {isRecording ? "Recording..." : "Voice Intervention"}
-                      </p>
-                      <p className="text-xs text-text-muted">
-                        {isRecording ? "Tap stop to send instantly" : "Record a reassuring message"}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  {isRecording ? (
-                    <button
-                      onClick={stopRecording}
-                      className="bg-red-500 text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors shadow-lg shadow-red-500/20"
-                    >
-                      <MicOff size={18} />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={startRecording}
-                      disabled={sendingIntervention}
-                      className="bg-accent text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-accent-hover transition-colors shadow-lg shadow-accent/20 disabled:opacity-50"
-                    >
-                      {sendingIntervention && isRecording ? <Loader2 size={18} className="animate-spin" /> : <Mic size={18} />}
-                    </button>
-                  )}
                 </div>
               </div>
             </div>

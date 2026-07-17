@@ -110,11 +110,15 @@ export default function AdminDashboard() {
         if (historyRes.ok && isMounted) {
           const historyData = await historyRes.json();
           setChatHistory(historyData);
-          setHistoryError(null);
+          setHistoryError(null); // Clear any old error on success
         } else if (!historyRes.ok && isMounted) {
           const errText = await historyRes.text();
           console.error("Failed to load history", errText);
-          setHistoryError(`Server returned: ${historyRes.status} ${errText}`);
+          // Only show error if we have no messages yet — don't flicker!
+          setChatHistory(prev => {
+            if (prev.length === 0) setHistoryError(`Server returned: ${historyRes.status} ${errText}`);
+            return prev;
+          });
         }
 
         // Fetch session status
@@ -132,7 +136,13 @@ export default function AdminDashboard() {
         }
       } catch (err: any) {
         console.error("Failed to poll chat history:", err);
-        if (isMounted) setHistoryError(`Network/Fetch Error: ${err.message}`);
+        // Only show error if we have no messages — don't replace loaded chat with an error!
+        if (isMounted) {
+          setChatHistory(prev => {
+            if (prev.length === 0) setHistoryError(`Network/Fetch Error: ${(err as Error).message}`);
+            return prev;
+          });
+        }
       } finally {
         if (isMounted) setIsSyncingSession(false);
       }
@@ -141,7 +151,8 @@ export default function AdminDashboard() {
     // Initial fetch
     fetchSessionData();
     // Poll every 3 seconds
-    pollInterval = setInterval(fetchSessionData, 3000);
+    // Poll every 5s — slow enough to avoid flicker, fast enough to feel live
+    pollInterval = setInterval(fetchSessionData, 5000);
 
     return () => {
       isMounted = false;

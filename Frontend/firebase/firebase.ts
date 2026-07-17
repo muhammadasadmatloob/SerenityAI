@@ -8,12 +8,12 @@ import { initializeFirestore } from "firebase/firestore";
 setLogLevel("silent");
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCQE1edP7aquOKmt__HI6ig7Ipnoy3neEM",
-  authDomain: "serenityfirebaseauthapp.firebaseapp.com",
-  projectId: "serenityfirebaseauthapp",
-  storageBucket: "serenityfirebaseauthapp.firebasestorage.app",
-  messagingSenderId: "912212577475",
-  appId: "1:912212577475:web:aa446b15dd579af3aba676",
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);

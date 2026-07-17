@@ -23,7 +23,7 @@ interface Alert {
 interface ChatMessage {
   id: string | number;
   text: string;
-  sender: 'user' | 'ai';
+  sender: 'user' | 'ai' | 'admin';
   timestamp?: any;
   time?: number;
 }
@@ -165,16 +165,26 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!activeIntervention) return;
 
-    const q = query(collection(db, `admin_overrides/${activeIntervention.uid}/sessions/${activeIntervention.session_id}/messages`));
+    const q = query(
+      collection(db, `admin_overrides/${activeIntervention.uid}/sessions/${activeIntervention.session_id}/messages`),
+      // orderBy not used here so we handle null serverTimestamp gracefully
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs: ChatMessage[] = [];
       snapshot.forEach(doc => {
         const data = doc.data();
+        // Use client-side timestamp stored in createdAt, fallback to Firestore serverTimestamp
+        // This prevents null timestamps (pending server write) from sorting to year-0
+        const ts = data.clientTimestamp
+          ? new Date(data.clientTimestamp)
+          : data.timestamp
+            ? data.timestamp.toDate()
+            : new Date();
         msgs.push({
           id: doc.id,
           text: data.text,
-          sender: 'ai', // Admin acts as AI Donna
-          timestamp: data.timestamp ? data.timestamp.toDate() : new Date()
+          sender: 'admin', // Mark clearly as admin so renderer puts it on the RIGHT
+          timestamp: ts
         });
       });
       setAdminMessages(msgs);
@@ -184,11 +194,20 @@ export default function AdminDashboard() {
   }, [activeIntervention]);
 
   // Combine and sort messages
-  // allMessages.time is a normalized number for sorting
-  const mappedHistory = chatHistory.map(m => ({ ...m, time: new Date((m.timestamp as string) || 0).getTime() }));
-  const mappedAdmin = adminMessages.map(m => ({ ...m, time: (m.timestamp as Date).getTime() }));
+  // Merge backend chat history (PostgreSQL) and admin override messages (Firestore)
+  // Use a large fallback (Date.now()) for null/invalid timestamps so they go to the end
+  const mappedHistory = chatHistory.map(m => ({
+    ...m,
+    time: m.timestamp ? new Date(m.timestamp as string).getTime() : Date.now()
+  }));
+  const mappedAdmin = adminMessages.map(m => ({
+    ...m,
+    time: m.timestamp instanceof Date && !isNaN(m.timestamp.getTime())
+      ? m.timestamp.getTime()
+      : Date.now()
+  }));
   const allMessages = [...mappedHistory, ...mappedAdmin];
-  allMessages.sort((a, b) => a.time - b.time);
+  allMessages.sort((a, b) => (a.time || 0) - (b.time || 0));
 
   useEffect(() => {
     if (chatScrollRef.current) {
@@ -224,8 +243,9 @@ export default function AdminDashboard() {
       await addDoc(collection(db, `admin_overrides/${activeIntervention.uid}/sessions/${activeIntervention.session_id}/messages`), {
         text: interventionText.trim(),
         audio_url: null,
-        timestamp: serverTimestamp(),
-        sender: 'ai',
+        timestamp: serverTimestamp(),         // Server-authoritative time (async)
+        clientTimestamp: new Date().toISOString(), // Client time (instant, used for sorting until server resolves)
+        sender: 'admin',
       });
       setInterventionText('');
     } catch (err) {
@@ -360,16 +380,23 @@ export default function AdminDashboard() {
                 </div>
               ) : (
                 allMessages.map((msg, idx) => {
-                  const isUser = msg.sender === 'user';
+                  // 'user' = client on the LEFT, 'ai' = AI Donna on the RIGHT, 'admin' = you (admin) on the RIGHT
+                  const isClient = msg.sender === 'user';
+                  const isAdminMsg = msg.sender === 'admin';
                   return (
-                    <div key={idx} className={`flex ${isUser ? 'justify-start' : 'justify-end'}`}>
+                    <div key={idx} className={`flex ${isClient ? 'justify-start' : 'justify-end'}`}>
                       <div className={`max-w-[80%] rounded-2xl px-5 py-3 ${
-                        isUser 
-                          ? 'bg-surface border border-border text-text-main rounded-tl-sm' 
-                          : 'bg-accent text-white shadow-lg shadow-accent/20 rounded-tr-sm'
+                        isClient
+                          ? 'bg-surface border border-border text-text-main rounded-tl-sm'
+                          : isAdminMsg
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 rounded-tr-sm'
+                            : 'bg-accent text-white shadow-lg shadow-accent/20 rounded-tr-sm'
                       }`}>
+                        {isAdminMsg && (
+                          <span className="text-[10px] text-blue-200 font-semibold mb-1 block">You (Admin)</span>
+                        )}
                         <p className="text-[15px] leading-relaxed">{msg.text}</p>
-                        <span className={`text-[10px] mt-2 block ${isUser ? 'text-text-muted' : 'text-white/70'}`}>
+                        <span className={`text-[10px] mt-2 block ${isClient ? 'text-text-muted' : 'text-white/70'}`}>
                           {new Date(msg.time).toLocaleTimeString()}
                         </span>
                       </div>

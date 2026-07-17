@@ -86,13 +86,8 @@ export default function ProfileInfoScreen() {
   }, []);
 
   const handleSave = async () => {
-    if (!data.name || !data.eName || !data.ePhone || !data.eEmail) {
+    if (!data.name || !data.eName || !data.ePhone) {
         Alert.alert("Almost there!", "We just need a few more details from you. Please fill in all the blanks.");
-        return;
-    }
-
-    if (!data.eEmail.endsWith("@gmail.com")) {
-        Alert.alert("Emergency Email", "Please provide a valid emergency contact email ending in @gmail.com.");
         return;
     }
 
@@ -118,7 +113,7 @@ export default function ProfileInfoScreen() {
         const res = await fetch(`${BACKEND_URL}/api/profile/update`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ name: data.name, gender: data.gender, emergency_name: data.eName, emergency_phone: data.ePhone, emergency_email: data.eEmail })
+            body: JSON.stringify({ name: data.name, gender: data.gender, emergency_name: data.eName, emergency_phone: data.ePhone, emergency_email: "" })
         });
         
         if (res.ok) {
@@ -132,7 +127,7 @@ export default function ProfileInfoScreen() {
                     birthDate,
                     data.gender || "Not Set",
                     location,
-                    { name: data.eName, phone: data.ePhone, email: data.eEmail }
+                    { name: data.eName, phone: data.ePhone, email: "" }
                 );
             }
             Keyboard.dismiss();
@@ -271,7 +266,7 @@ export default function ProfileInfoScreen() {
                   <Text className="font-bold text-[#4A55A2]">Important:</Text> Please add the number of a trusted friend, family member, or your real human therapist. As an AI, Donna cannot physically intervene in a crisis, so this contact will be alerted with your live location if severe distress is detected.
                 </Text>
                 <Text className="text-xs text-gray-700 font-bold leading-relaxed mt-2 text-[#4A55A2]">
-                  Note: The emergency phone number must be available on WhatsApp, and the email must be actively working.
+                  Note: The emergency phone number must be available on WhatsApp.
                 </Text>
               </View>
               <TextInput 
@@ -286,14 +281,6 @@ export default function ProfileInfoScreen() {
                   onChangeText={(t) => setData({...data, ePhone: t})} 
                   keyboardType="phone-pad" 
                   className="bg-white p-4 rounded-2xl mb-4 border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
-              />
-              <TextInput 
-                  placeholder="Emergency Email (e.g. contact@gmail.com)" 
-                  value={data.eEmail} 
-                  onChangeText={(t) => setData({...data, eEmail: t})} 
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  className="bg-white p-4 rounded-2xl border border-[#808CEA]/20 text-gray-800 font-medium shadow-sm" 
               />
           </View>
 

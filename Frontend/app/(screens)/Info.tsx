@@ -126,13 +126,8 @@ export default function InfoScreen() {
   };
 
   const handleContinue = async () => {
-    if (!name || !gender || !eName || !ePhone || !eEmail || !location) {
+    if (!name || !gender || !eName || !ePhone || !location) {
       Alert.alert("Almost there!", "We need just a little more info. Please fill in your name, date of birth, gender, location, and emergency contacts.");
-      return;
-    }
-
-    if (!eEmail.endsWith("@gmail.com")) {
-      Alert.alert("Emergency Email", "Please provide a valid emergency contact email ending in @gmail.com.");
       return;
     }
 
@@ -178,7 +173,7 @@ export default function InfoScreen() {
           lng: location.longitude,
           eName: eName,
           ePhone: ePhone,
-          eEmail: eEmail,
+          eEmail: "",
         }),
       });
 
@@ -193,7 +188,7 @@ export default function InfoScreen() {
         birthDate,
         gender,
         { latitude: location.latitude, longitude: location.longitude },
-        { name: eName, phone: ePhone, email: eEmail }
+        { name: eName, phone: ePhone, email: "" }
       );
 
     } catch (err: any) {
@@ -391,7 +386,7 @@ export default function InfoScreen() {
                     <Text className="font-bold text-[#4A55A2]">Important:</Text> Please add the number of a trusted friend, family member, or your real human therapist. As an AI, Donna cannot physically intervene in a crisis, so this contact will be alerted with your live location if severe distress is detected. 
                   </Text>
                   <Text className="text-xs text-gray-700 font-bold leading-relaxed mt-2 text-[#4A55A2]">
-                    Note: The emergency phone number must be available on WhatsApp, and the email must be actively working.
+                    Note: The emergency phone number must be available on WhatsApp.
                   </Text>
                 </View>
                 <TextInput
@@ -405,20 +400,10 @@ export default function InfoScreen() {
                 <TextInput
                   placeholder="WhatsApp Number (e.g. +923331234567)"
                   placeholderTextColor="#9CA3AF"
-                  className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800 mb-3"
+                  className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800"
                   keyboardType="phone-pad"
                   value={ePhone}
                   onChangeText={setEPhone}
-                  style={{ fontSize: 15, color: "#1F2937" }}
-                />
-                <TextInput
-                  placeholder="Emergency Email (e.g. contact@gmail.com)"
-                  placeholderTextColor="#9CA3AF"
-                  className="bg-[#F8FAFC] px-5 py-4 rounded-2xl border border-[#EDF2F7] text-gray-800"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  value={eEmail}
-                  onChangeText={setEEmail}
                   style={{ fontSize: 15, color: "#1F2937" }}
                 />
               </View>

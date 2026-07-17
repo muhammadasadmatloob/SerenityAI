@@ -2138,8 +2138,16 @@ async def chat_node(
     if (sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS) or sess.is_ended:
         return {"reply": "Looking forward to our next session.", "crisis_detected": False}
 
+    # If crisis was already activated, mute AI and just save user message
+    if sess.is_crisis_active:
+        user_msg = Message(session_id=data.session_id, role="user", content=encrypt(data.content))
+        db.add(user_msg)
+        db.commit()
+        return {"reply": "", "crisis_detected": True}
+
     # Crisis Management backend-enforced scan
     if await backend_crisis_scan(data.content):
+        sess.is_crisis_active = True
         # Save user message
         user_msg = Message(session_id=data.session_id, role="user", content=encrypt(data.content))
         db.add(user_msg)
@@ -2354,8 +2362,29 @@ async def chat_voice(
     if not user_text.strip():
         raise HTTPException(status_code=400, detail="No speech detected.")
 
+    # If crisis was already activated, mute AI and just save user message
+    if sess.is_crisis_active:
+        user_msg = Message(session_id=session_id, role="user", content=encrypt(user_text))
+        db.add(user_msg)
+        db.commit()
+        db.refresh(user_msg)
+        # Persist user audio
+        import shutil
+        user_audio_filename = f"user_{user_msg.id}{ext}"
+        user_audio_path = os.path.join("static", "audio", user_audio_filename)
+        shutil.copy(temp_path, user_audio_path)
+        user_msg.audio_url = f"/static/audio/{user_audio_filename}"
+        db.commit()
+        
+        return {
+            "user_message": {"id": user_msg.id, "text": user_text, "audio_url": user_msg.audio_url},
+            "ai_message": {"id": -1, "text": "", "audio_url": None},
+            "crisis_active": True
+        }
+
     # Crisis Management backend-enforced scan on user text
-    if backend_crisis_scan(user_text):
+    if await backend_crisis_scan(user_text):
+        sess.is_crisis_active = True
         user_msg = Message(session_id=session_id, role="user", content=encrypt(user_text))
         db.add(user_msg)
         db.commit()
@@ -2922,6 +2951,14 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
         }
         
         db_firestore.collection("crisis_alerts").add(alert_data)
+        
+        # Update Postgres session to mute AI
+        if data.session_id is not None:
+            sess = db.query(UserSession).filter_by(id=data.session_id, user_uid=uid).first()
+            if sess:
+                sess.is_crisis_active = True
+                db.commit()
+                
         return {"status": "alert_dispatched", "message": "Crisis alert sent to admin dashboard."}
     except Exception as e:
         logger.error(f"Failed to save crisis alert to Firestore: {e}")

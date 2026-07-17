@@ -141,7 +141,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!activeIntervention) return;
 
-    const q = query(collection(db, `admin_overrides/${activeIntervention.uid}/messages`));
+    const q = query(collection(db, `admin_overrides/${activeIntervention.uid}/sessions/${activeIntervention.session_id}/messages`));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs: ChatMessage[] = [];
       snapshot.forEach(doc => {
@@ -197,7 +197,7 @@ export default function AdminDashboard() {
     if (!activeIntervention || !interventionText.trim() || !sessionActive) return;
     setSendingIntervention(true);
     try {
-      await addDoc(collection(db, `admin_overrides/${activeIntervention.uid}/messages`), {
+      await addDoc(collection(db, `admin_overrides/${activeIntervention.uid}/sessions/${activeIntervention.session_id}/messages`), {
         text: interventionText.trim(),
         audio_url: null,
         timestamp: serverTimestamp(),

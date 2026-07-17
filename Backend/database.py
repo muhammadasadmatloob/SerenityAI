@@ -31,6 +31,10 @@ try:
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE sessions ADD COLUMN is_ended BOOLEAN DEFAULT FALSE"))
                 conn.commit()
+        if 'is_crisis_active' not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE sessions ADD COLUMN is_crisis_active BOOLEAN DEFAULT FALSE"))
+                conn.commit()
 except Exception as e:
     print(f"Automatic migration notice: {e}")
 
@@ -62,6 +66,7 @@ class UserSession(Base):
     duration_seconds = Column(Integer, default=0)
     current_phase = Column(String, default="rapport_building")
     is_ended = Column(Boolean, default=False)
+    is_crisis_active = Column(Boolean, default=False)
 
     @validates('mood')
     def validate_mood(self, key, value):

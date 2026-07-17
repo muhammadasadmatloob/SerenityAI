@@ -592,13 +592,13 @@ export default function ChatScreen() {
   // Admin Override Listener (Live Human Intervention)
   useEffect(() => {
     const user = auth.currentUser;
-    if (!user) return;
+    if (!user || !activeId) return;
     
     // We only want to listen to messages created AFTER the chat opened to prevent re-playing old interventions.
     const mountTime = new Date();
     
     const q = query(
-      collection(db, `admin_overrides/${user.uid}/messages`),
+      collection(db, `admin_overrides/${user.uid}/sessions/${activeId}/messages`),
       orderBy("timestamp", "desc"),
       limit(1)
     );
@@ -635,7 +635,7 @@ export default function ChatScreen() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [activeId]);
 
   // Call Duration Timer
   useEffect(() => {
@@ -793,8 +793,12 @@ export default function ChatScreen() {
         if (data.reply === "Looking forward to our next session.") {
           setSessionFinished(true);
         }
-        setHistory((prev) => [...prev, { id: tempUserId + 1, text: data.reply, sender: "ai" }]);
-        playSoundEffect("receive");
+        
+        if (data.reply) {
+          setHistory((prev) => [...prev, { id: tempUserId + 1, text: data.reply, sender: "ai" }]);
+          playSoundEffect("receive");
+        }
+        
         fetchSuggestions(activeId);
         
         // Trigger emergency alert quietly in background if crisis detected
@@ -1359,14 +1363,24 @@ export default function ChatScreen() {
             }
             return msg;
           });
-          return [
-            ...updated,
-            { id: data.ai_message.id, text: data.ai_message.text, sender: "ai", audio_url: data.ai_message.audio_url, shouldAutoplay: true }
-          ];
+          
+          if (data.ai_message.text) {
+            return [
+              ...updated,
+              { id: data.ai_message.id, text: data.ai_message.text, sender: "ai", audio_url: data.ai_message.audio_url, shouldAutoplay: true }
+            ];
+          }
+          return updated;
         });
 
-        playSoundEffect("receive");
+        if (data.ai_message.text) {
+          playSoundEffect("receive");
+        }
         fetchSuggestions(activeId!);
+        
+        if (data.crisis_active) {
+          triggerEmergencyAlert();
+        }
       } else {
         if (addedTempMsg) {
           setHistory(prev => prev.filter(msg => msg.id !== tempUserMsgId));

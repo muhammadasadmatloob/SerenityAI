@@ -2950,6 +2950,19 @@ def trigger_emergency(data: EmergencyTrigger, uid: str = Depends(get_current_uid
             "timestamp": firestore.SERVER_TIMESTAMP
         }
         
+        # --- DEDUPLICATION: Only create ONE alert per session ---
+        # Check if a pending or active alert already exists for this session_id
+        if data.session_id is not None:
+            existing_alerts = db_firestore.collection("crisis_alerts") \
+                .where("session_id", "==", data.session_id) \
+                .where("status", "in", ["pending", "active"]) \
+                .limit(1) \
+                .stream()
+            if any(True for _ in existing_alerts):
+                logger.info(f"Crisis alert for session {data.session_id} already exists. Skipping duplicate.")
+                return {"status": "alert_already_exists", "message": "Crisis alert already active for this session."}
+        # ---------------------------------------------------------
+        
         db_firestore.collection("crisis_alerts").add(alert_data)
         
         # Update Postgres session to mute AI

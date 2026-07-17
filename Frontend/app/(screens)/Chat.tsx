@@ -379,6 +379,8 @@ export default function ChatScreen() {
   const callStatusRef = useRef(callStatus);
   const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const callMeteringValuesRef = useRef<number[]>([]);
+  // Guard: ensure emergency alert is only triggered ONCE per session, no matter how many messages come back with crisis_detected
+  const hasTriggeredAlertRef = useRef(false);
 
   useEffect(() => {
     isCallActiveRef.current = isCallActive;
@@ -799,8 +801,9 @@ export default function ChatScreen() {
         
         fetchSuggestions(activeId);
         
-        // Trigger emergency alert quietly in background if crisis detected
-        if (data.crisis_detected) {
+        // Trigger emergency alert quietly in background if crisis detected — only once per session
+        if (data.crisis_detected && !hasTriggeredAlertRef.current) {
+          hasTriggeredAlertRef.current = true;
           triggerEmergencyAlert();
         }
       } else {
@@ -1134,8 +1137,9 @@ export default function ChatScreen() {
       const chatData = await chatRes.json();
       const reply = chatData.reply || "";
 
-      // Trigger emergency alert quietly in background if crisis detected
-      if (chatData.crisis_detected) {
+      // Trigger emergency alert quietly in background if crisis detected — only once per session
+      if (chatData.crisis_detected && !hasTriggeredAlertRef.current) {
+        hasTriggeredAlertRef.current = true;
         triggerEmergencyAlert();
       }
 
@@ -1376,7 +1380,8 @@ export default function ChatScreen() {
         }
         fetchSuggestions(activeId!);
         
-        if (data.crisis_active) {
+        if (data.crisis_active && !hasTriggeredAlertRef.current) {
+          hasTriggeredAlertRef.current = true;
           triggerEmergencyAlert();
         }
       } else {

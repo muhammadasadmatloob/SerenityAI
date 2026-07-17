@@ -57,4 +57,10 @@ Backend/static/qdrant_test_db/
 # Temporary Office lock files
 **/~$*
 
+# Documentation, presentation and script folders not used by frontend/backend
+diagrams/
+documents/
+presentation/
+scripts/
+
 

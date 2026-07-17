@@ -79,7 +79,7 @@ export default function AdminDashboard() {
 
   const constructMessage = (alert: Alert) => {
     const mapsLink = `https://maps.google.com/?q=${alert.location.lat},${alert.location.lng}`;
-    return `DO NOT REPLY. Your relative/friend ${alert.username || 'the user'} is in danger. Be at their location to save them so they can get aid in time.\n\nCrisis Reason: ${alert.reason}\nLive Location: ${mapsLink}\n\nDonna from Serenity AI.`;
+    return `*Urgent Support Requested*\n\nHello, this is Donna, the therapeutic AI companion for ${alert.username || 'the user'}. I am reaching out because they are currently experiencing a difficult mental health crisis and have designated you as their trusted emergency contact.\n\nThey are in need of immediate compassion and human support. Please reach out to them or proceed to their current location to ensure they are safe.\n\n*Crisis Context:* ${alert.reason}\n*Live Location:* ${mapsLink}\n\nYour presence could make all the difference right now.`;
   };
 
   const handleSendWhatsApp = (alert: Alert) => {

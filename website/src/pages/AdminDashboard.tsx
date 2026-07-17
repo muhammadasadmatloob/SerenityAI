@@ -6,7 +6,7 @@ import { auth, db } from '../firebase';
 import { LogOut, AlertTriangle, MapPin, Phone, CheckCircle, ShieldAlert, Send, X, Loader2 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'donnaserenity25@gmail.com';
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:8000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://serenityai-93qt.onrender.com';
 
 interface Alert {
   id: string;

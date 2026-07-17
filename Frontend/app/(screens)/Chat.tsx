@@ -4,7 +4,8 @@ import { MotiView } from "moti";
 import React, { useState, useEffect, useRef } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, TouchableOpacity, View, Alert, Modal, Keyboard, ActivityIndicator, Linking } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { auth } from "../../firebase/firebase";
+import { auth, db } from "../../firebase/firebase";
+import { collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { BACKEND_URL } from "../../constants/config";
 import { Audio } from "expo-av";
 import * as Location from 'expo-location';
@@ -587,6 +588,54 @@ export default function ChatScreen() {
 
     return () => clearInterval(syncInterval);
   }, [secondsActive, sessionFinished, activeId]);
+
+  // Admin Override Listener (Live Human Intervention)
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (!user) return;
+    
+    // We only want to listen to messages created AFTER the chat opened to prevent re-playing old interventions.
+    const mountTime = new Date();
+    
+    const q = query(
+      collection(db, `admin_overrides/${user.uid}/messages`),
+      orderBy("timestamp", "desc"),
+      limit(1)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          const data = change.doc.data();
+          const msgTime = data.timestamp?.toDate();
+          
+          // Only process if the message is newer than when we mounted
+          if (msgTime && msgTime > mountTime) {
+            console.log("Received Admin Override!");
+            const overrideId = `admin_${change.doc.id}`;
+            
+            // Auto-play audio if included
+            setHistory((prev) => [
+              ...prev, 
+              { 
+                id: overrideId, 
+                text: data.text || "Voice message from Donna", 
+                sender: "ai", 
+                audio_url: data.audio_url || null,
+                shouldAutoplay: !!data.audio_url 
+              }
+            ]);
+            
+            if (!data.audio_url) {
+              playSoundEffect("receive");
+            }
+          }
+        }
+      });
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Call Duration Timer
   useEffect(() => {

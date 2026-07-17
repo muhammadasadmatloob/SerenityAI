@@ -194,11 +194,25 @@ export default function AdminDashboard() {
   }, [activeIntervention]);
 
   // Combine and sort messages
-  // Merge backend chat history (PostgreSQL) and admin override messages (Firestore)
-  // Use a large fallback (Date.now()) for null/invalid timestamps so they go to the end
+  // KEY FIX: Python's isoformat() returns timestamps WITHOUT a timezone suffix (e.g. "2026-07-17T05:23:25")
+  // Without 'Z', JS treats them as LOCAL time, causing them to sort incorrectly vs Firestore UTC timestamps.
+  // We force UTC by appending 'Z' to any timestamp string that lacks timezone info.
+  const parseBackendTimestamp = (ts: any): number => {
+    if (!ts) return Date.now();
+    if (typeof ts === 'string') {
+      // Append Z if no timezone info so JS parses as UTC (matches Firestore timestamps)
+      const normalized = (!ts.endsWith('Z') && !ts.includes('+') && !ts.includes('-', 10))
+        ? ts.replace(' ', 'T') + 'Z'
+        : ts;
+      const parsed = new Date(normalized).getTime();
+      return isNaN(parsed) ? Date.now() : parsed;
+    }
+    return Date.now();
+  };
+
   const mappedHistory = chatHistory.map(m => ({
     ...m,
-    time: m.timestamp ? new Date(m.timestamp as string).getTime() : Date.now()
+    time: parseBackendTimestamp(m.timestamp)
   }));
   const mappedAdmin = adminMessages.map(m => ({
     ...m,

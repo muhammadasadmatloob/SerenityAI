@@ -370,6 +370,7 @@ export default function RootLayout() {
             <MotiView
               key="custom-splash"
               exit={{ opacity: 0 }}
+              transition={{ type: "timing", duration: 600 }}
               className="absolute inset-0 z-[999]"
               style={{ backgroundColor: "#55C5CC" }}
             >

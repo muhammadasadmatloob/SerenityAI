@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { Stack, useRouter, useSegments, useLocalSearchParams } from "expo-router";
+import { Stack, useRouter, useSegments, useGlobalSearchParams } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -98,7 +98,7 @@ export default function RootLayout() {
   // 1. TabBar Visibility Logic
   // TabBar appears ONLY on the primary navigation hubs.
   const currentScreen = segments[segments.length - 1];
-  const params = useLocalSearchParams();
+  const params = useGlobalSearchParams();
   const isFromFeel = params.fromFeel === "true";
   const screensWithTabBar = ["Chat", "History", "Profile"];
   const isTabBarVisible = screensWithTabBar.includes(currentScreen || "") && !isFromFeel;

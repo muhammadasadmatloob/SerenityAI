@@ -2836,7 +2836,8 @@ def get_history_list(uid: str = Depends(get_current_uid), db: Session = Depends(
             "id": s.id,
             "mood": s.mood,
             "date": s.created_at.strftime("%b %d, %Y"),
-            "snippet": decrypt(last.content)[:60] + "..." if last else "New journey started"
+            "snippet": decrypt(last.content)[:60] + "..." if last else "New journey started",
+            "is_ended": s.is_ended
         })
     return history
 

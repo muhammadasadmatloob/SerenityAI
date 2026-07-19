@@ -56,8 +56,8 @@ if (__DEV__) {
   ]);
 }
 
-// Hide the native splash screen immediately to let the custom splash screen display
-SplashScreen.hideAsync().catch(() => {});
+// Prevent the native splash screen from auto-hiding until React Native mounts
+SplashScreen.preventAutoHideAsync();
 
 const { width } = Dimensions.get("window");
 
@@ -86,6 +86,7 @@ export default function RootLayout() {
   const segments = useSegments();
   
   const [showCustomSplash, setShowCustomSplash] = useState(true);
+  const [splashStage, setSplashStage] = useState<"native" | "zoom" | "custom" | "none">("native");
   const [isAppReady, setIsAppReady] = useState(false);
   const [isProfileComplete, setIsProfileComplete] = useState<boolean | null>(null);
   const [hasAcceptedPrivacy, setHasAcceptedPrivacy] = useState<boolean | null>(null);
@@ -94,6 +95,27 @@ export default function RootLayout() {
   const [splashMessage] = useState("Your personal AI therapist");
   const [user, setUser] = useState<any>(null);
   const unsubSnap = useRef<(() => void) | null>(null);
+
+  // Mount effect to handle native splash hide and transitions
+  useEffect(() => {
+    // Dismiss native OS splash screen as soon as React Native finishes rendering the initial frame
+    SplashScreen.hideAsync().catch(() => {});
+
+    // Transition to Phase 2 (Zoom animation of launcher icon)
+    const zoomTimer = setTimeout(() => {
+      setSplashStage("zoom");
+    }, 1200);
+
+    // Transition to Phase 3 (Custom animated gradient splash)
+    const customTimer = setTimeout(() => {
+      setSplashStage("custom");
+    }, 2000);
+
+    return () => {
+      clearTimeout(zoomTimer);
+      clearTimeout(customTimer);
+    };
+  }, []);
 
   // 1. TabBar Visibility Logic
   // TabBar appears ONLY on the primary navigation hubs.
@@ -279,7 +301,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!isAppReady) return null;
+  if (!isAppReady && !showCustomSplash) return null;
 
   return (
     <SafeAreaProvider>
@@ -319,19 +341,21 @@ export default function RootLayout() {
         )}
 
         {/* Main Navigation Stack */}
-        <Stack screenOptions={{ 
-          headerShown: false, 
-          animation: "fade",
-          contentStyle: { backgroundColor: 'transparent' }
-        }}>
-          <Stack.Screen name="(auth)/auth" options={{ gestureEnabled: false }} />
-          <Stack.Screen name="(screens)/EmailVerify" options={{ gestureEnabled: false }} />
-          <Stack.Screen name="(screens)/Info" options={{ gestureEnabled: false }} />
-          <Stack.Screen name="(screens)/Feel" options={{ gestureEnabled: false }} />
-          {/* New Sub-screens for Profile */}
-          <Stack.Screen name="(screens)/ProfileInfo" options={{ animation: "fade" }} />
-          <Stack.Screen name="(screens)/Settings" options={{ animation: "fade" }} />
-        </Stack>
+        {isAppReady && (
+          <Stack screenOptions={{ 
+            headerShown: false, 
+            animation: "fade",
+            contentStyle: { backgroundColor: 'transparent' }
+          }}>
+            <Stack.Screen name="(auth)/auth" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="(screens)/EmailVerify" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="(screens)/Info" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="(screens)/Feel" options={{ gestureEnabled: false }} />
+            {/* New Sub-screens for Profile */}
+            <Stack.Screen name="(screens)/ProfileInfo" options={{ animation: "fade" }} />
+            <Stack.Screen name="(screens)/Settings" options={{ animation: "fade" }} />
+          </Stack>
+        )}
 
         {/* Global TabBar - Only shown when splash is gone and on main pages and keyboard is hidden */}
         {!showCustomSplash && isProfileComplete && isTabBarVisible && !isKeyboardVisible && <TabBar />}
@@ -344,66 +368,108 @@ export default function RootLayout() {
               exit={{ opacity: 0 }}
               className="absolute inset-0 z-[999]"
             >
-              <LinearGradient 
-                colors={["#55C5CC", "#808CEA", "#A48CED"]} 
-                locations={[0, 0.52, 1]} 
-                className="absolute inset-0" 
-              />
-              <View className="flex-1 items-center justify-center">
-                <MotiView 
-                  from={{ scale: 0, opacity: 0 }} 
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ type: "spring" }}
-                  className="items-center justify-center"
+              {/* If stage is custom, show the beautiful gradient. Otherwise, show the solid teal background matching the logo background */}
+              {splashStage === "custom" ? (
+                <MotiView
+                  from={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ type: "timing", duration: 800 }}
+                  style={StyleSheet.absoluteFillObject}
                 >
-                  <HeartPulse size={90} color="#FFFFFF" strokeWidth={1.5} />
+                  <LinearGradient 
+                    colors={["#55C5CC", "#808CEA", "#A48CED"]} 
+                    locations={[0, 0.52, 1]} 
+                    style={StyleSheet.absoluteFillObject} 
+                  />
                 </MotiView>
-                
-                <MotiText 
-                  from={{ opacity: 0, translateY: 30 }} 
-                  animate={{ opacity: 1, translateY: 0 }} 
-                  transition={{ delay: 400 }} 
-                  className="text-white text-5xl font-extrabold mt-12 tracking-[6px]"
-                >
-                  SERENITY AI
-                </MotiText>
-                
-                {networkError ? (
+              ) : (
+                <View 
+                  style={[StyleSheet.absoluteFillObject, { backgroundColor: "#55C5CC" }]} 
+                />
+              )}
+
+              <View className="flex-1 items-center justify-center">
+                {/* Stage 1 & 2: Launcher Icon with Zoom Animation */}
+                {(splashStage === "native" || splashStage === "zoom") && (
                   <MotiView
-                    from={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="mt-8 items-center px-6"
+                    from={{ scale: 1, opacity: 1 }}
+                    animate={{
+                      scale: splashStage === "zoom" ? 4.5 : 1,
+                      opacity: splashStage === "zoom" ? 0 : 1,
+                    }}
+                    transition={{
+                      type: "timing",
+                      duration: 800,
+                    }}
+                    className="items-center justify-center"
                   >
-                    <View className="bg-white/10 border border-white/20 px-8 py-5 rounded-2xl items-center max-w-[85%]">
-                      <Text className="text-white text-lg font-bold text-center mb-1">
-                        Network Connectivity Error
-                      </Text>
-                      <Text className="text-white/80 text-sm text-center mb-5">
-                        Please check your internet connection and try again.
-                      </Text>
-                      <TouchableOpacity
-                        onPress={handleRetry}
-                        activeOpacity={0.85}
-                        className="bg-white px-6 py-2.5 rounded-full shadow-md"
+                    <Image
+                      source={require("../assets/splash-icon.png")}
+                      style={{ width: 200, height: 200 }}
+                      resizeMode="contain"
+                    />
+                  </MotiView>
+                )}
+
+                {/* Stage 3: Custom Splash Screen Elements */}
+                {splashStage === "custom" && (
+                  <View className="items-center justify-center w-full">
+                    <MotiView 
+                      from={{ scale: 0, opacity: 0 }} 
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", damping: 12 }}
+                      className="items-center justify-center"
+                    >
+                      <HeartPulse size={90} color="#FFFFFF" strokeWidth={1.5} />
+                    </MotiView>
+                    
+                    <MotiText 
+                      from={{ opacity: 0, translateY: 30 }} 
+                      animate={{ opacity: 1, translateY: 0 }} 
+                      transition={{ delay: 300, type: "timing", duration: 600 }} 
+                      className="text-white text-5xl font-extrabold mt-12 tracking-[6px]"
+                    >
+                      SERENITY AI
+                    </MotiText>
+                    
+                    {networkError ? (
+                      <MotiView
+                        from={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="mt-8 items-center px-6"
                       >
-                        <Text className="text-[#808CEA] font-extrabold text-sm">
-                          Retry Connection
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </MotiView>
-                ) : (
-                  <MotiView 
-                    from={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
-                    transition={{ delay: 800 }}
-                    className="mt-6 items-center"
-                  >
-                    <View className="bg-white/10 px-8 py-3 rounded-full border border-white/20">
-                      <Text className="text-white text-lg font-light italic">{splashMessage}</Text>
-                    </View>
-                    <DotLoader />
-                  </MotiView>
+                        <View className="bg-white/10 border border-white/20 px-8 py-5 rounded-2xl items-center max-w-[85%]">
+                          <Text className="text-white text-lg font-bold text-center mb-1">
+                            Network Connectivity Error
+                          </Text>
+                          <Text className="text-white/80 text-sm text-center mb-5">
+                            Please check your internet connection and try again.
+                          </Text>
+                          <TouchableOpacity
+                            onPress={handleRetry}
+                            activeOpacity={0.85}
+                            className="bg-white px-6 py-2.5 rounded-full shadow-md"
+                          >
+                            <Text className="text-[#808CEA] font-extrabold text-sm">
+                              Retry Connection
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </MotiView>
+                    ) : (
+                      <MotiView 
+                        from={{ opacity: 0 }} 
+                        animate={{ opacity: 1 }} 
+                        transition={{ delay: 600 }}
+                        className="mt-6 items-center"
+                      >
+                        <View className="bg-white/10 px-8 py-3 rounded-full border border-white/20">
+                          <Text className="text-white text-lg font-light italic">{splashMessage}</Text>
+                        </View>
+                        <DotLoader />
+                      </MotiView>
+                    )}
+                  </View>
                 )}
               </View>
             </MotiView>

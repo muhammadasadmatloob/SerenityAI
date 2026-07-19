@@ -320,7 +320,7 @@ export default function RootLayout() {
             />
 
             {/* Global Calming Breathing Brain Animation - Only shown on Feel screen */}
-            {currentScreen === "Feel" && (
+            {currentScreen === "Feel" && !showCustomSplash && (
               <MotiView
                 from={{ scale: 0.95, opacity: 0.15 }}
                 animate={{ scale: 1.05, opacity: 0.25 }}
@@ -371,9 +371,10 @@ export default function RootLayout() {
               key="custom-splash"
               exit={{ opacity: 0 }}
               className="absolute inset-0 z-[999]"
+              style={{ backgroundColor: "#55C5CC" }}
             >
-              {/* If stage is custom, show the beautiful gradient. Otherwise, show the solid teal background matching the logo background */}
-              {splashStage === "custom" ? (
+              {/* Fade in the beautiful gradient on top of the solid base */}
+              {splashStage === "custom" && (
                 <MotiView
                   from={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
@@ -386,10 +387,6 @@ export default function RootLayout() {
                     style={StyleSheet.absoluteFillObject} 
                   />
                 </MotiView>
-              ) : (
-                <View 
-                  style={[StyleSheet.absoluteFillObject, { backgroundColor: "#55C5CC" }]} 
-                />
               )}
 
               <View className="flex-1 items-center justify-center">

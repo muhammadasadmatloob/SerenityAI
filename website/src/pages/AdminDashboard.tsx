@@ -243,6 +243,17 @@ export default function AdminDashboard() {
       // Find the alert to get session_id and call backend to resolve/end the session
       const alertObj = alerts.find(a => a.id === id);
       if (alertObj && alertObj.session_id) {
+        // Send a session_ended trigger document to Firestore so the user's client ends immediately in real-time
+        try {
+          await addDoc(collection(db, `admin_overrides/${alertObj.uid}/sessions/${alertObj.session_id}/messages`), {
+            type: 'session_ended',
+            is_session_ended: true,
+            timestamp: serverTimestamp()
+          });
+        } catch (fsErr) {
+          console.error("Error writing session end override to Firestore", fsErr);
+        }
+
         const token = await auth.currentUser?.getIdToken();
         const res = await fetch(`${BACKEND_URL}/api/admin/session/resolve/${alertObj.session_id}`, {
           method: 'POST',

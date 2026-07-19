@@ -626,6 +626,19 @@ export default function ChatScreen() {
           const data = change.doc.data();
           
           console.log("Received Admin Override!");
+          if (data.type === "session_ended" || data.is_session_ended) {
+            setSessionFinished(true);
+            setHistory((prev) => {
+              const msgId = `system_${change.doc.id}`;
+              if (prev.some(m => m.id === msgId)) return prev;
+              return [
+                ...prev,
+                { id: msgId, text: "Looking forward to our next session.", sender: "ai" }
+              ];
+            });
+            return;
+          }
+
           const overrideId = `admin_${change.doc.id}`;
           
           // Auto-play audio if included, but prevent duplicates

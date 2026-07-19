@@ -260,7 +260,7 @@ export default function RootLayout() {
 
   // 3. Navigation Guard (The Traffic Controller)
   useEffect(() => {
-    if (!isAppReady || isProfileComplete === null || networkError || hasAcceptedPrivacy === null || showCustomSplash) return;
+    if (!isAppReady || isProfileComplete === null || networkError || hasAcceptedPrivacy === null) return;
 
     const currentScreen = segments[segments.length - 1];
     const inAuthGroup = segments[0] === "(auth)";
@@ -280,16 +280,20 @@ export default function RootLayout() {
       // Force Profile Info completion
       if (!onInfoScreen) router.replace("/(screens)/Info");
     } else if (isProfileComplete === true) {
-      // Redirect to Welcome screen if coming from setup screens
-      const isOnSetupScreen = inAuthGroup || onVerifyScreen || onInfoScreen || onPrivacyScreen;
+      // Redirect to Welcome screen only if explicitly coming from auth or onboarding flows
       const isWelcomeScreen = currentScreen === "Welcome";
-      if (isOnSetupScreen && !isWelcomeScreen) {
+      const isFromAuth = inAuthGroup || onInfoScreen || onVerifyScreen;
+      
+      if (isFromAuth && !isWelcomeScreen) {
         const mode = onInfoScreen ? "signup" : "login";
         router.replace({ pathname: "/(screens)/Welcome", params: { mode } });
+      } else if (onPrivacyScreen) {
+        // Cold start boot -> route directly to Feel screen in background
+        router.replace("/(screens)/Feel");
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAppReady, isProfileComplete, segments, networkError, user, hasAcceptedPrivacy, showCustomSplash]);
+  }, [isAppReady, isProfileComplete, segments, networkError, user, hasAcceptedPrivacy]);
 
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   useEffect(() => {

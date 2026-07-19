@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Mic, X, Sparkles } from "lucide-react-native";
+import { Mic, X, Sparkles, User, History } from "lucide-react-native";
 import { MotiView } from "moti";
 import React, { useState, useEffect } from "react"; 
 import {
@@ -249,6 +249,25 @@ export default function FeelScreen() {
   return (
     <View className="flex-1">
       <SafeAreaView className="flex-1">
+        {/* Header Navigation Buttons */}
+        <View className="flex-row justify-between items-center px-6 pt-4 pb-2">
+          <TouchableOpacity
+            onPress={() => router.push("/(screens)/Profile")}
+            activeOpacity={0.7}
+            className="w-11 h-11 rounded-full bg-white/30 border border-white/50 items-center justify-center shadow-sm"
+          >
+            <User size={22} color="#1E293B" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push("/(screens)/History")}
+            activeOpacity={0.7}
+            className="w-11 h-11 rounded-full bg-white/30 border border-white/50 items-center justify-center shadow-sm"
+          >
+            <History size={22} color="#1E293B" />
+          </TouchableOpacity>
+        </View>
+
         <KeyboardAvoidingView
           behavior="padding"
           className="flex-1"

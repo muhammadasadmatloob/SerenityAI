@@ -260,7 +260,7 @@ export default function RootLayout() {
 
   // 3. Navigation Guard (The Traffic Controller)
   useEffect(() => {
-    if (!isAppReady || isProfileComplete === null || networkError || hasAcceptedPrivacy === null) return;
+    if (!isAppReady || isProfileComplete === null || networkError || hasAcceptedPrivacy === null || showCustomSplash) return;
 
     const currentScreen = segments[segments.length - 1];
     const inAuthGroup = segments[0] === "(auth)";
@@ -289,7 +289,7 @@ export default function RootLayout() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAppReady, isProfileComplete, segments, networkError, user, hasAcceptedPrivacy]);
+  }, [isAppReady, isProfileComplete, segments, networkError, user, hasAcceptedPrivacy, showCustomSplash]);
 
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   useEffect(() => {

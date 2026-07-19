@@ -322,6 +322,7 @@ export default function ChatScreen() {
   const [secondsActive, setSecondsActive] = useState(0);
   const [sessionFinished, setSessionFinished] = useState(false);
   const [sessionCap, setSessionCap] = useState<number>(1800);
+  const [isCrisisActive, setIsCrisisActive] = useState(false);
 
   // Voice Call States
   const [isCallActive, setIsCallActive] = useState(false);
@@ -453,6 +454,9 @@ export default function ChatScreen() {
         if (data.duration_seconds >= cap || data.is_ended) {
           setSessionFinished(true);
         }
+        if (data.is_crisis_active) {
+          setIsCrisisActive(true);
+        }
       } else {
         if (data.code === "SESSION_EXPIRED" || data.message === "Session has expired") {
           Alert.alert(
@@ -511,6 +515,9 @@ export default function ChatScreen() {
           sid = data.session_id?.toString();
           if (data.session_cap_seconds) {
             setSessionCap(data.session_cap_seconds);
+          }
+          if (data.is_crisis_active) {
+            setIsCrisisActive(true);
           }
         } else {
           Alert.alert("Oops", data.message || "We had trouble picking up where you left off. Please try again.");
@@ -802,9 +809,12 @@ export default function ChatScreen() {
         fetchSuggestions(activeId);
         
         // Trigger emergency alert quietly in background if crisis detected — only once per session
-        if (data.crisis_detected && !hasTriggeredAlertRef.current) {
-          hasTriggeredAlertRef.current = true;
-          triggerEmergencyAlert();
+        if (data.crisis_detected) {
+          setIsCrisisActive(true);
+          if (!hasTriggeredAlertRef.current) {
+            hasTriggeredAlertRef.current = true;
+            triggerEmergencyAlert();
+          }
         }
       } else {
         setHistory((prev) => prev.filter((msg) => msg.id !== tempUserId));
@@ -1138,9 +1148,12 @@ export default function ChatScreen() {
       const reply = chatData.reply || "";
 
       // Trigger emergency alert quietly in background if crisis detected — only once per session
-      if (chatData.crisis_detected && !hasTriggeredAlertRef.current) {
-        hasTriggeredAlertRef.current = true;
-        triggerEmergencyAlert();
+      if (chatData.crisis_detected) {
+        setIsCrisisActive(true);
+        if (!hasTriggeredAlertRef.current) {
+          hasTriggeredAlertRef.current = true;
+          triggerEmergencyAlert();
+        }
       }
 
       if (!isCallActiveRef.current) return;
@@ -1380,9 +1393,12 @@ export default function ChatScreen() {
         }
         fetchSuggestions(activeId!);
         
-        if (data.crisis_active && !hasTriggeredAlertRef.current) {
-          hasTriggeredAlertRef.current = true;
-          triggerEmergencyAlert();
+        if (data.crisis_active) {
+          setIsCrisisActive(true);
+          if (!hasTriggeredAlertRef.current) {
+            hasTriggeredAlertRef.current = true;
+            triggerEmergencyAlert();
+          }
         }
       } else {
         if (addedTempMsg) {
@@ -1442,9 +1458,11 @@ export default function ChatScreen() {
           </View>
         </View>
         <View className="flex-row items-center gap-3">
-          <TouchableOpacity onPress={startCall} disabled={sessionFinished} className="w-10 h-10 rounded-full bg-slate-50 items-center justify-center shadow-sm border border-slate-100">
-            <Phone size={18} color={sessionFinished ? "#D1D5DB" : "#55C5CC"} />
-          </TouchableOpacity>
+          {!isCrisisActive && (
+            <TouchableOpacity onPress={startCall} disabled={sessionFinished} className="w-10 h-10 rounded-full bg-slate-50 items-center justify-center shadow-sm border border-slate-100">
+              <Phone size={18} color={sessionFinished ? "#D1D5DB" : "#55C5CC"} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={endSession} className="w-10 h-10 rounded-full bg-red-50 items-center justify-center shadow-sm border border-red-100">
             <LogOut size={18} color="#EF4444" style={{ marginLeft: 2 }} />
           </TouchableOpacity>
@@ -1650,7 +1668,7 @@ export default function ChatScreen() {
                 />
                 
                 {/* Mic icon inside the text input box when empty */}
-                {!message.trim() && !sessionFinished && (
+                {!message.trim() && !sessionFinished && !isCrisisActive && (
                   <TouchableOpacity 
                     onPress={handleStartVoiceRecording}
                     className="absolute right-3 p-2 bg-slate-50 rounded-full"

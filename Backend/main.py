@@ -785,8 +785,8 @@ async def text_to_speech(text: str, session_id: Optional[str] = None, db: Sessio
 def get_active_session(uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     sess = db.query(UserSession).filter_by(user_uid=uid, is_ended=False).order_by(UserSession.created_at.desc()).first()
     if not sess:
-        return {"session_id": None, "session_cap_seconds": SESSION_TIMEOUT_SECONDS}
-    return {"session_id": sess.id, "session_cap_seconds": SESSION_TIMEOUT_SECONDS}
+        return {"session_id": None, "session_cap_seconds": SESSION_TIMEOUT_SECONDS, "is_crisis_active": False}
+    return {"session_id": sess.id, "session_cap_seconds": SESSION_TIMEOUT_SECONDS, "is_crisis_active": sess.is_crisis_active}
 
 def compile_past_sessions_summary(uid: str, current_session_id: int, db: Session) -> str:
     # Query up to the last 4 sessions of the user, excluding the current active one
@@ -2748,7 +2748,7 @@ async def get_chat_suggestions(session_id: int, uid: str = Depends(get_current_u
 @app.get("/api/session/duration/{session_id}")
 def get_duration(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
     sess = validate_session_integrity(db, uid, session_id)
-    return {"duration_seconds": sess.duration_seconds or 0, "session_cap_seconds": SESSION_TIMEOUT_SECONDS, "is_ended": sess.is_ended}
+    return {"duration_seconds": sess.duration_seconds or 0, "session_cap_seconds": SESSION_TIMEOUT_SECONDS, "is_ended": sess.is_ended, "is_crisis_active": sess.is_crisis_active}
 
 @app.post("/api/session/duration")
 def update_duration(data: DurationUpdate, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):

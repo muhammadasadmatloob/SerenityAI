@@ -585,11 +585,20 @@ export default function ChatScreen() {
       try {
         const user = auth.currentUser;
         const token = await user?.getIdToken();
-        await fetch(`${BACKEND_URL}/api/session/duration`, {
+        const res = await fetch(`${BACKEND_URL}/api/session/duration`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
           body: JSON.stringify({ session_id: Number(activeId), duration_seconds: secondsActive })
         });
+        const resData = await res.json();
+        if (res.ok && resData) {
+          if (resData.is_ended) {
+            setSessionFinished(true);
+          }
+          if (resData.is_crisis_active) {
+            setIsCrisisActive(true);
+          }
+        }
       } catch {
         console.log("Failed to sync session duration");
       }

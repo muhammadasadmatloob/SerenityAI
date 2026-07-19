@@ -239,6 +239,24 @@ export default function AdminDashboard() {
     try {
       const alertRef = doc(db, 'crisis_alerts', id);
       await updateDoc(alertRef, { status: 'resolved' });
+
+      // Find the alert to get session_id and call backend to resolve/end the session
+      const alertObj = alerts.find(a => a.id === id);
+      if (alertObj && alertObj.session_id) {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch(`${BACKEND_URL}/api/admin/session/resolve/${alertObj.session_id}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          if (activeIntervention?.session_id === alertObj.session_id) {
+            setSessionActive(false);
+          }
+        }
+      }
     } catch (err) {
       console.error("Error resolving alert", err);
     }

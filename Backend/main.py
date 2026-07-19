@@ -2671,7 +2671,17 @@ def admin_get_session_status(session_id: int, admin_uid: str = Depends(get_admin
     sess = db.query(UserSession).filter_by(id=session_id).first()
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
-    return {"status": sess.status, "duration": sess.duration_seconds}
+    return {"status": "ended" if sess.is_ended else "active", "duration": sess.duration_seconds}
+
+@app.post("/api/admin/session/resolve/{session_id}")
+def admin_resolve_session(session_id: int, admin_uid: str = Depends(get_admin_uid), db: Session = Depends(get_db)):
+    sess = db.query(UserSession).filter_by(id=session_id).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+    sess.is_ended = True
+    db.commit()
+    logger.info(f"Session {session_id} marked as ended/resolved by admin {admin_uid}")
+    return {"status": "success", "session_id": session_id}
 
 @app.get("/api/chat/history/{session_id}")
 def get_chat_history(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):
@@ -2755,7 +2765,7 @@ def update_duration(data: DurationUpdate, uid: str = Depends(get_current_uid), d
     sess = validate_session_integrity(db, uid, data.session_id)
     sess.duration_seconds = data.duration_seconds
     db.commit()
-    return {"duration_seconds": sess.duration_seconds}
+    return {"duration_seconds": sess.duration_seconds, "is_ended": sess.is_ended, "is_crisis_active": sess.is_crisis_active}
 
 @app.post("/api/session/end/{session_id}")
 def end_session_endpoint(session_id: int, uid: str = Depends(get_current_uid), db: Session = Depends(get_db)):

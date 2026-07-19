@@ -1,9 +1,9 @@
-import { ChevronRight, User, LogOut, Settings, ShieldCheck, FileText, X } from "lucide-react-native";
+import { ChevronRight, User, LogOut, Settings, ShieldCheck, FileText, X, ArrowLeft } from "lucide-react-native";
 import React, { useState, useCallback } from "react";
 import { Image, Text, TouchableOpacity, View, ScrollView, ActivityIndicator, RefreshControl, Modal, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { BACKEND_URL } from "../../constants/config";
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -26,6 +26,8 @@ const moodMap: Record<string, string> = {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const fromFeel = params.fromFeel === "true";
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState<any>(null);
@@ -104,8 +106,21 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-transparent" edges={['top']}>
+      {fromFeel && (
+        <View className="px-6 pt-4">
+          <TouchableOpacity 
+            onPress={() => router.back()} 
+            activeOpacity={0.7}
+            className="flex-row items-center gap-1.5 bg-slate-100/80 px-3.5 py-2 rounded-full border border-slate-200 self-start"
+            style={{ elevation: 2 }}
+          >
+            <ArrowLeft size={16} color="#475569" />
+            <Text className="text-slate-600 font-bold text-xs uppercase tracking-wider">Exit</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <ScrollView 
-        className="flex-1 px-6 pt-6"
+        className="flex-1 px-6 pt-2"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchProfile(); }} tintColor="#76C1CE" />}

@@ -252,7 +252,7 @@ export default function FeelScreen() {
         {/* Header Navigation Buttons */}
         <View className="flex-row justify-between items-center px-6 pt-4 pb-2">
           <TouchableOpacity
-            onPress={() => router.push("/(screens)/Profile")}
+            onPress={() => router.push({ pathname: "/(screens)/Profile", params: { fromFeel: "true" } })}
             activeOpacity={0.7}
             className="w-11 h-11 rounded-full bg-white/30 border border-white/50 items-center justify-center shadow-sm"
           >
@@ -260,7 +260,7 @@ export default function FeelScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => router.push("/(screens)/History")}
+            onPress={() => router.push({ pathname: "/(screens)/History", params: { fromFeel: "true" } })}
             activeOpacity={0.7}
             className="w-11 h-11 rounded-full bg-white/30 border border-white/50 items-center justify-center shadow-sm"
           >

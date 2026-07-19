@@ -4,8 +4,8 @@ import { ScrollView, Text, View, ActivityIndicator, RefreshControl, TouchableOpa
 import { SafeAreaView } from "react-native-safe-area-context";
 import { auth } from "../../firebase/firebase";
 import { BACKEND_URL } from "../../constants/config";
-import { Trash2, Calendar, ChevronRight, MessageCircle, X } from "lucide-react-native";
-import { useRouter, useFocusEffect } from "expo-router";
+import { Trash2, Calendar, ChevronRight, MessageCircle, X, ArrowLeft } from "lucide-react-native";
+import { useRouter, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 
 const moodMap: Record<string, string> = {
@@ -24,6 +24,8 @@ const moodMap: Record<string, string> = {
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const fromFeel = params.fromFeel === "true";
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -126,8 +128,21 @@ export default function HistoryScreen() {
   return (
     <View className="flex-1 bg-transparent">
       <SafeAreaView className="flex-1" edges={['top']}>
+        {fromFeel && (
+          <View className="px-8 pt-4 pb-2">
+            <TouchableOpacity 
+              onPress={() => router.back()} 
+              activeOpacity={0.7}
+              className="flex-row items-center gap-1.5 bg-slate-100/80 px-3.5 py-2 rounded-full border border-slate-200 self-start"
+              style={{ elevation: 2 }}
+            >
+              <ArrowLeft size={16} color="#475569" />
+              <Text className="text-slate-600 font-bold text-xs uppercase tracking-wider">Exit</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {/* Beautiful Animated Header */}
-        <View className="px-8 pt-10 pb-6">
+        <View className="px-8 pt-4 pb-6">
           <MotiView 
             from={{ opacity: 0, translateY: -15 }} 
             animate={{ opacity: 1, translateY: 0 }} 

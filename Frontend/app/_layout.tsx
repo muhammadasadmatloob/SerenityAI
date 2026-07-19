@@ -56,8 +56,8 @@ if (__DEV__) {
   ]);
 }
 
-// Prevent the native splash screen from auto-hiding
-SplashScreen.preventAutoHideAsync();
+// Hide the native splash screen immediately to let the custom splash screen display
+SplashScreen.hideAsync().catch(() => {});
 
 const { width } = Dimensions.get("window");
 

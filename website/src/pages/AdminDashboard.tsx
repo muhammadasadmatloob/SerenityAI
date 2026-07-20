@@ -134,6 +134,9 @@ export default function AdminDashboard() {
           } else {
             setSessionActive(true);
           }
+          if (statusData.human_intervened !== undefined) {
+            setIsIntervened(statusData.human_intervened);
+          }
         }
       } catch (err: any) {
         console.error("Failed to poll chat history:", err);
@@ -284,12 +287,62 @@ export default function AdminDashboard() {
     window.open(waLink, '_blank');
   };
 
+  const [isIntervened, setIsIntervened] = useState<boolean>(false);
+
+  const handleToggleIntervention = async (interveneState: boolean) => {
+    if (!activeIntervention?.session_id) return;
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch(`${BACKEND_URL}/api/admin/session/intervene/${activeIntervention.session_id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ intervene: interveneState })
+      });
+      if (res.ok) {
+        setIsIntervened(interveneState);
+      }
+    } catch (e) {
+      console.error("Failed to toggle intervention state:", e);
+    }
+  };
+
   const handleSendTextIntervention = async () => {
     if (!activeIntervention || !interventionText.trim() || !sessionActive) return;
     setSendingIntervention(true);
+    const textToSend = interventionText.trim();
     try {
+      const token = await auth.currentUser?.getIdToken();
+      if (token) {
+        // Send to Backend API so message is encrypted & saved to SQL database PERMANENTLY!
+        const res = await fetch(`${BACKEND_URL}/api/admin/session/send-message`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            session_id: activeIntervention.session_id,
+            content: textToSend
+          })
+        });
+        if (res.ok) {
+          const newMsg = await res.json();
+          setChatHistory(prev => [...prev, {
+            id: newMsg.id,
+            text: textToSend,
+            sender: 'admin',
+            timestamp: new Date().toISOString()
+          }]);
+          setIsIntervened(true);
+        }
+      }
+
       await addDoc(collection(db, `admin_overrides/${activeIntervention.uid}/sessions/${activeIntervention.session_id}/messages`), {
-        text: interventionText.trim(),
+        text: textToSend,
         audio_url: null,
         timestamp: serverTimestamp(),         // Server-authoritative time (async)
         clientTimestamp: new Date().toISOString(), // Client time (instant, used for sorting until server resolves)
@@ -400,9 +453,23 @@ export default function AdminDashboard() {
                 <ShieldAlert size={20} className="mr-2 animate-pulse" />
                 Live Chat Intervention: {activeIntervention.username}
               </div>
-              <button onClick={() => setActiveIntervention(null)} className="text-text-muted hover:text-text-main p-1 transition-colors">
-                <X size={24} />
-              </button>
+              <div className="flex items-center gap-3">
+                {sessionActive && (
+                  <button
+                    onClick={() => handleToggleIntervention(!isIntervened)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                      isIntervened
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-amber-500/10 text-amber-600 border border-amber-500/30 hover:bg-amber-500 hover:text-white'
+                    }`}
+                  >
+                    {isIntervened ? '⚡ Human Therapist Active' : '🤖 AI Crisis Mode Active (Click to Intervene)'}
+                  </button>
+                )}
+                <button onClick={() => setActiveIntervention(null)} className="text-text-muted hover:text-text-main p-1 transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
             </div>
             
             {/* Session Status Banner */}

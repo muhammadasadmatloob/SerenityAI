@@ -506,6 +506,13 @@ class ReportGenerateRequest(BaseModel):
     start_date: str # ISO string
     end_date: str # ISO string
 
+class InterveneRequest(BaseModel):
+    intervene: bool = True
+
+class AdminSendMessageRequest(BaseModel):
+    session_id: int
+    content: str
+
 @app.get("/")
 def home():
     return {"status": "Donna AI Backend is Online"}
@@ -1055,6 +1062,45 @@ CRISIS_RESPONSE = (
     "or the Edhi Foundation (115) for free, confidential support. "
     "Let's take a slow, deep breath together. Please reach out to these emergency services first."
 )
+
+CRISIS_SYSTEM_PROMPT = (
+    "SYSTEM PROMPT: CRISIS DE-ESCALATION SPECIALIST\n"
+    "You are Donna, a compassionate, calm, and grounded AI Crisis De-escalation Specialist for SerenityAI.\n"
+    "The user is experiencing severe emotional distress, crisis, or suicidal/self-harm ideation.\n"
+    "YOUR PRIMARY MISSION:\n"
+    "1. KEEP THE USER SAFE, CALM, AND GROUNDED. Never leave the user without support.\n"
+    "2. Provide immediate, gentle empathy and validation without being overly clinical or verbose.\n"
+    "3. Offer actionable grounding techniques (e.g., 5-4-3-2-1 sensory exercise, slow deep breathing, 4-7-8 breathing).\n"
+    "4. Remind them gently that help is available and emergency resources (Umang Pakistan: 0311-7786264, Taskeen: 0316-2843362, Edhi: 115) are ready to support them.\n"
+    "5. Keep your responses warm, concise (2 to 4 sentences max), and focused entirely on their immediate safety and emotional calm.\n"
+    "6. Reassure them that a human specialist / therapist is being notified and will be with them soon."
+)
+
+async def generate_crisis_deescalation_response(session_id: int, user_message: str, user_name: str, db: Session) -> str:
+    try:
+        raw_msgs = db.query(Message).filter_by(session_id=session_id).order_by(Message.timestamp.desc()).limit(6).all()
+        context = [{"role": "user" if m.role == "user" else "assistant", "content": decrypt(m.content)} for m in reversed(raw_msgs)]
+        
+        prompt = (
+            f"The user {user_name} is in a crisis state. Provide an immediate, soothing, de-escalating, and grounding response.\n"
+            f"Guidance: Offer a brief grounding exercise, validate their feelings calmly, remind them of safety and resources, "
+            f"and let them know they are supported. Keep response under 4 sentences.\n"
+            f"User message: {user_message}"
+        )
+        
+        res = await hybrid_ai_router(
+            messages=[{"role": "system", "content": CRISIS_SYSTEM_PROMPT}] + context + [{"role": "user", "content": prompt}],
+            current_phase="crisis",
+            path="standard",
+            response_format=None
+        )
+        reply = res.choices[0].message.content or ""
+        if reply.strip():
+            return reply.strip()
+        return CRISIS_RESPONSE
+    except Exception as e:
+        logger.error(f"Crisis de-escalation generation error: {e}")
+        return CRISIS_RESPONSE
 
 BOUNDARY_RESPONSE = (
     "I can hear how much anger or hurt you are carrying right now, and I'm here to support you in "
@@ -2000,6 +2046,10 @@ async def start_sess(
     # Crisis Management backend-enforced scan
     initial_desc = data.description.strip() if (data.description and data.description.strip()) else ""
     if await backend_crisis_scan(initial_desc) or data.mood.lower() in ["crisis", "suicidal"]:
+        new_sess.is_crisis_active = True
+        new_sess.human_intervened = False
+        db.commit()
+
         # Log crisis event
         crisis_event = CrisisEvent(
             session_id=session_id_val,
@@ -2011,11 +2061,13 @@ async def start_sess(
         db.add(crisis_event)
         db.commit()
         
-        # Save safety reply
-        ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(CRISIS_RESPONSE))
+        user_name_str = user.name if (user and user.name) else "friend"
+        crisis_reply = await generate_crisis_deescalation_response(session_id_val, initial_desc or data.mood, user_name_str, db)
+
+        ai_msg = Message(session_id=session_id_val, role="assistant", content=encrypt(crisis_reply))
         db.add(ai_msg)
         db.commit()
-        return {"session_id": session_id_val, "first_message": CRISIS_RESPONSE}
+        return {"session_id": session_id_val, "first_message": crisis_reply}
 
     name = user.name if (user and user.name) else "Friend"
     
@@ -2140,16 +2192,30 @@ async def chat_node(
     if (sess.duration_seconds and sess.duration_seconds >= SESSION_TIMEOUT_SECONDS) or sess.is_ended:
         return {"reply": "Looking forward to our next session.", "crisis_detected": False}
 
-    # If crisis was already activated, mute AI and just save user message
+    # If crisis was already activated
     if sess.is_crisis_active:
         user_msg = Message(session_id=data.session_id, role="user", content=encrypt(data.content))
         db.add(user_msg)
         db.commit()
-        return {"reply": "", "crisis_detected": True}
+
+        if sess.human_intervened:
+            # Human therapist has intervened and taken over live chat. AI does not auto-reply.
+            return {"reply": "", "crisis_detected": True, "human_intervened": True}
+        else:
+            # Human therapist has NOT intervened yet -> Crisis AI de-escalates user using Gemini Crisis System Prompt
+            u_obj = db.query(User).filter_by(firebase_uid=uid).first()
+            user_name_str = u_obj.name if (u_obj and u_obj.name) else "friend"
+            crisis_reply = await generate_crisis_deescalation_response(data.session_id, data.content, user_name_str, db)
+
+            ai_msg = Message(session_id=data.session_id, role="assistant", content=encrypt(crisis_reply))
+            db.add(ai_msg)
+            db.commit()
+            return {"reply": crisis_reply, "crisis_detected": True, "human_intervened": False}
 
     # Crisis Management backend-enforced scan
     if await backend_crisis_scan(data.content):
         sess.is_crisis_active = True
+        sess.human_intervened = False
         # Save user message
         user_msg = Message(session_id=data.session_id, role="user", content=encrypt(data.content))
         db.add(user_msg)
@@ -2167,11 +2233,14 @@ async def chat_node(
         )
         db.add(crisis_event)
         
-        # Save safety reply
-        ai_msg = Message(session_id=data.session_id, role="assistant", content=encrypt(CRISIS_RESPONSE))
+        u_obj = db.query(User).filter_by(firebase_uid=uid).first()
+        user_name_str = u_obj.name if (u_obj and u_obj.name) else "friend"
+        crisis_reply = await generate_crisis_deescalation_response(data.session_id, data.content, user_name_str, db)
+
+        ai_msg = Message(session_id=data.session_id, role="assistant", content=encrypt(crisis_reply))
         db.add(ai_msg)
         db.commit()
-        return {"reply": CRISIS_RESPONSE, "crisis_detected": True}
+        return {"reply": crisis_reply, "crisis_detected": True, "human_intervened": False}
 
     user_msg = Message(session_id=data.session_id, role="user", content=encrypt(data.content))
     db.add(user_msg)
@@ -2671,7 +2740,65 @@ def admin_get_session_status(session_id: int, admin_uid: str = Depends(get_admin
     sess = db.query(UserSession).filter_by(id=session_id).first()
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
-    return {"status": "ended" if sess.is_ended else "active", "duration": sess.duration_seconds}
+    return {
+        "status": "ended" if sess.is_ended else "active",
+        "duration": sess.duration_seconds,
+        "is_crisis_active": sess.is_crisis_active,
+        "human_intervened": sess.human_intervened
+    }
+
+@app.post("/api/admin/session/intervene/{session_id}")
+def admin_intervene_session(session_id: int, data: InterveneRequest, admin_uid: str = Depends(get_admin_uid), db: Session = Depends(get_db)):
+    sess = db.query(UserSession).filter_by(id=session_id).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+    sess.human_intervened = data.intervene
+    db.commit()
+    
+    try:
+        if firestore_db:
+            override_ref = firestore_db.collection("session_overrides").document(str(session_id))
+            override_ref.set({
+                "session_id": session_id,
+                "human_intervened": data.intervene,
+                "is_crisis_active": sess.is_crisis_active,
+                "timestamp": firestore.SERVER_TIMESTAMP
+            }, merge=True)
+    except Exception as e:
+        logger.error(f"Firestore intervene sync error: {e}")
+        
+    return {"status": "success", "session_id": session_id, "human_intervened": data.intervene}
+
+@app.post("/api/admin/session/send-message")
+def admin_send_message(data: AdminSendMessageRequest, admin_uid: str = Depends(get_admin_uid), db: Session = Depends(get_db)):
+    sess = db.query(UserSession).filter_by(id=data.session_id).first()
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    sess.human_intervened = True
+    db.commit()
+    
+    # Save therapist message directly to SQL Message table so it is PERMANENT!
+    msg = Message(session_id=data.session_id, role="assistant", content=encrypt(data.content))
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    
+    # Push to Firestore live stream for mobile app UI
+    try:
+        if firestore_db:
+            override_ref = firestore_db.collection("session_overrides").document(str(data.session_id))
+            override_ref.set({
+                "session_id": data.session_id,
+                "human_intervened": True,
+                "last_therapist_message": data.content,
+                "last_therapist_message_id": msg.id,
+                "timestamp": firestore.SERVER_TIMESTAMP
+            }, merge=True)
+    except Exception as e:
+        logger.error(f"Firestore message broadcast error: {e}")
+        
+    return {"status": "success", "id": msg.id, "text": data.content, "sender": "ai"}
 
 @app.post("/api/admin/session/resolve/{session_id}")
 def admin_resolve_session(session_id: int, admin_uid: str = Depends(get_admin_uid), db: Session = Depends(get_db)):
@@ -2679,7 +2806,23 @@ def admin_resolve_session(session_id: int, admin_uid: str = Depends(get_admin_ui
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
     sess.is_ended = True
+    sess.is_crisis_active = False
+    sess.human_intervened = False
     db.commit()
+    
+    try:
+        if firestore_db:
+            override_ref = firestore_db.collection("session_overrides").document(str(session_id))
+            override_ref.set({
+                "session_id": session_id,
+                "is_session_ended": True,
+                "is_ended": True,
+                "human_intervened": False,
+                "timestamp": firestore.SERVER_TIMESTAMP
+            }, merge=True)
+    except Exception as e:
+        logger.error(f"Firestore resolve sync error: {e}")
+
     logger.info(f"Session {session_id} marked as ended/resolved by admin {admin_uid}")
     return {"status": "success", "session_id": session_id}
 
